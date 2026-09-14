@@ -13,16 +13,25 @@ from rest_framework.status import (
     HTTP_202_ACCEPTED,
     HTTP_204_NO_CONTENT,
     HTTP_400_BAD_REQUEST,
+    HTTP_403_FORBIDDEN,
 )
 from rest_framework.views import APIView
 
 from ..models import ProjectClosure
+from ..permissions import can_edit_document_content, strip_protected_fields
 from ..serializers import (
     ProjectClosureCreateSerializer,
     ProjectClosureSerializer,
     ProjectDocumentCreateSerializer,
     TinyProjectClosureSerializer,
 )
+
+LOCKED_DOCUMENT_ERROR = {
+    "detail": (
+        "This document is locked and you do not have an active edit exception. "
+        "Contact an administrator to request temporary edit access."
+    )
+}
 
 
 class ProjectClosures(APIView):
@@ -153,7 +162,7 @@ class ProjectClosureDetail(APIView):
 
         serializer = ProjectClosureSerializer(
             project_closure,
-            context={"request": request},
+            context={"request": request, "include_edit_exception_details": True},
         )
         return Response(serializer.data, status=HTTP_200_OK)
 
@@ -168,9 +177,15 @@ class ProjectClosureDetail(APIView):
             f"{request.user} is partially updating project closure {project_closure}"
         )
 
+        if not can_edit_document_content(request.user, project_closure.document):
+            settings.LOGGER.warning(
+                f"{request.user} was denied editing locked project closure {project_closure.pk}"
+            )
+            return Response(LOCKED_DOCUMENT_ERROR, status=HTTP_403_FORBIDDEN)
+
         serializer = ProjectClosureSerializer(
             project_closure,
-            data=request.data,
+            data=strip_protected_fields(request.data),
             partial=True,
         )
 
@@ -198,9 +213,15 @@ class ProjectClosureDetail(APIView):
             f"{request.user} is updating project closure {project_closure}"
         )
 
+        if not can_edit_document_content(request.user, project_closure.document):
+            settings.LOGGER.warning(
+                f"{request.user} was denied editing locked project closure {project_closure.pk}"
+            )
+            return Response(LOCKED_DOCUMENT_ERROR, status=HTTP_403_FORBIDDEN)
+
         serializer = ProjectClosureSerializer(
             project_closure,
-            data=request.data,
+            data=strip_protected_fields(request.data),
             partial=True,
         )
 

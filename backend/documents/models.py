@@ -779,3 +779,68 @@ class CustomPublication(models.Model):
     class Meta:
         verbose_name = "Publication"
         verbose_name_plural = "Publications"
+
+
+# region ================== Document Edit Exception ==================
+
+
+class DocumentEditException(CommonModel):
+    """
+    A time-limited grant allowing a specific user to edit the rich text
+    fields of a specific locked ProjectDocument.
+
+    An exception never confers the ability to change the document's
+    approval status or approval flags. It exists purely to permit content
+    corrections on a document that has otherwise been locked following
+    approval.
+
+    Expiry is evaluated lazily: expired rows are removed when encountered
+    during fetches and permission checks, so the table only ever holds
+    exceptions that are still meaningful.
+    """
+
+    document = models.ForeignKey(
+        "documents.ProjectDocument",
+        on_delete=models.CASCADE,
+        related_name="edit_exceptions",
+    )
+
+    user = models.ForeignKey(
+        "users.User",
+        on_delete=models.CASCADE,
+        related_name="document_edit_exceptions",
+        help_text="The user granted temporary edit access.",
+    )
+
+    granted_by = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="edit_exceptions_granted",
+        help_text="The administrator who granted or last extended this exception.",
+    )
+
+    expires_at = models.DateTimeField(
+        help_text="The moment after which this exception no longer grants edit access.",
+    )
+
+    def is_active(self, now=None) -> bool:
+        """Whether this exception currently grants edit access."""
+        from django.utils import timezone
+
+        now = now or timezone.now()
+        return self.expires_at > now
+
+    def __str__(self) -> str:
+        return f"EditException(doc={self.document_id}, user={self.user_id}, until={self.expires_at})"
+
+    class Meta:
+        verbose_name = "Document Edit Exception"
+        verbose_name_plural = "Document Edit Exceptions"
+        indexes = [
+            models.Index(fields=["document", "user"]),
+        ]
+
+
+# endregion ==================================

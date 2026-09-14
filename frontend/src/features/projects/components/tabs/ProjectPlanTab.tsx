@@ -19,12 +19,13 @@ import { InlineSaveEditor } from "@/shared/components/editor";
 import { ProjectSection } from "@/shared/components/ProjectSection";
 import { SetAreasModal } from "@/features/projects/components/modals/SetAreasModal";
 import { CreateProgressReportModal } from "@/features/projects/components/modals/CreateProgressReportModal";
+import { ManageEditExceptionsModal } from "@/features/projects/components/modals/ManageEditExceptionsModal";
 import { MethodologyImage } from "@/features/projects/components/MethodologyImage";
 import { ProjectPlanEndorsements } from "@/features/projects/components/ProjectPlanEndorsements";
 import { CommentSection } from "@/features/projects/components/comments";
 import { Alert, AlertDescription } from "@/shared/components/ui/alert";
 import { Button } from "@/shared/components/ui/button";
-import { CheckCircle, Plus, Lock } from "lucide-react";
+import { CheckCircle, Plus, Lock, LockOpen } from "lucide-react";
 
 interface ProjectPlanTabProps {
 	projectPlan: IProjectPlan | null;
@@ -61,6 +62,7 @@ export const ProjectPlanTab = ({
 	// Modal state for special actions
 	const [isSetAreasModalOpen, setIsSetAreasModalOpen] = useState(false);
 	const [isCreateReportModalOpen, setIsCreateReportModalOpen] = useState(false);
+	const [isManageAccessModalOpen, setIsManageAccessModalOpen] = useState(false);
 	const { data: currentUser } = useCurrentUser();
 
 	if (!projectPlan) {
@@ -82,16 +84,24 @@ export const ProjectPlanTab = ({
 
 	// Lock editing if project plan is approved and progress reports exist
 	const isLocked = isProjectPlanLocked(projectPlan.document, all_documents);
+	const hasActiveException =
+		projectPlan.document.current_user_has_edit_exception ?? false;
 	const canEdit = getEffectiveCanEdit(
 		canEditBase,
 		projectPlan.document,
 		isLocked,
-		currentUser?.is_superuser
+		currentUser?.is_superuser,
+		hasActiveException
 	);
 
 	// Lock report creation if project is terminated/completed or has approved closure
 	const isCreationLocked = isReportCreationLocked(project, all_documents);
-	const lockedMessage = getLockedMessage(projectPlan.document, isLocked);
+	const lockedMessage = getLockedMessage(
+		projectPlan.document,
+		isLocked,
+		undefined,
+		hasActiveException
+	);
 
 	return (
 		<>
@@ -122,11 +132,40 @@ export const ProjectPlanTab = ({
 				<div className="space-y-6">
 					{/* Locked banner */}
 					{isLocked && (
-						<Alert className="border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800">
-							<Lock className="size-4 text-gray-500 dark:text-gray-400" />
-							<AlertDescription className="text-gray-600 dark:text-gray-400">
-								This document is locked to preserve data integrity. The project
-								has progressed past this stage.
+						<Alert
+							className={
+								hasActiveException
+									? "border-amber-400 dark:border-amber-600 bg-amber-100 dark:bg-amber-950/40"
+									: "border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800"
+							}
+						>
+							{hasActiveException ? (
+								<LockOpen className="size-4 text-amber-600 dark:text-amber-400" />
+							) : (
+								<Lock className="size-4 text-gray-500 dark:text-gray-400" />
+							)}
+							<AlertDescription
+								className={`flex items-center justify-between gap-4 ${
+									hasActiveException
+										? "font-medium text-amber-800 dark:text-amber-200"
+										: "text-gray-600 dark:text-gray-400"
+								}`}
+							>
+								<span>
+									{hasActiveException
+										? "You have temporary access to edit this locked document."
+										: "This document is locked to preserve data integrity. The project has progressed past this stage."}
+								</span>
+								{currentUser?.is_superuser && (
+									<Button
+										size="sm"
+										variant="outline"
+										className="shrink-0"
+										onClick={() => setIsManageAccessModalOpen(true)}
+									>
+										Manage edit access
+									</Button>
+								)}
 							</AlertDescription>
 						</Alert>
 					)}
@@ -338,6 +377,15 @@ export const ProjectPlanTab = ({
 				onClose={() => setIsCreateReportModalOpen(false)}
 				project={project}
 			/>
+
+			{currentUser?.is_superuser && (
+				<ManageEditExceptionsModal
+					isOpen={isManageAccessModalOpen}
+					onClose={() => setIsManageAccessModalOpen(false)}
+					documentId={projectPlan.document.id}
+					projectId={projectId}
+				/>
+			)}
 		</>
 	);
 };

@@ -12,11 +12,20 @@ from rest_framework.status import (
     HTTP_202_ACCEPTED,
     HTTP_204_NO_CONTENT,
     HTTP_400_BAD_REQUEST,
+    HTTP_403_FORBIDDEN,
 )
 from rest_framework.views import APIView
 
 from ..models import StudentReport
+from ..permissions import can_edit_document_content
 from ..serializers import StudentReportSerializer, TinyStudentReportSerializer
+
+LOCKED_DOCUMENT_ERROR = {
+    "detail": (
+        "This document is locked and you do not have an active edit exception. "
+        "Contact an administrator to request temporary edit access."
+    )
+}
 
 
 class StudentReports(APIView):
@@ -109,7 +118,7 @@ class StudentReportDetail(APIView):
 
         serializer = StudentReportSerializer(
             student_report,
-            context={"request": request},
+            context={"request": request, "include_edit_exception_details": True},
         )
         return Response(serializer.data, status=HTTP_200_OK)
 
@@ -228,7 +237,7 @@ class StudentReportByYear(APIView):
 
         serializer = StudentReportSerializer(
             student_report,
-            context={"request": request},
+            context={"request": request, "include_edit_exception_details": True},
         )
         return Response(serializer.data, status=HTTP_200_OK)
 
@@ -250,6 +259,12 @@ class UpdateStudentReport(APIView):
 
         if not report:
             raise NotFound
+
+        if not can_edit_document_content(request.user, report.document):
+            settings.LOGGER.warning(
+                f"{request.user} was denied editing locked student report {report.pk}"
+            )
+            return Response(LOCKED_DOCUMENT_ERROR, status=HTTP_403_FORBIDDEN)
 
         serializer = StudentReportSerializer(
             report,

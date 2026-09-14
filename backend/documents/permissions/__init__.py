@@ -8,6 +8,12 @@ from .annual_report_permissions import (
     CanPublishAnnualReport,
     CanViewAnnualReport,
 )
+from .content_edit_permissions import (
+    PROTECTED_APPROVAL_FIELDS,
+    can_edit_document_content,
+    is_document_locked,
+    strip_protected_fields,
+)
 from .document_permissions import (
     CanApproveDocument,
     CanDeleteDocument,
@@ -24,6 +30,10 @@ __all__ = [
     "CanRecallDocument",
     "CanDeleteDocument",
     "CanGeneratePDF",
+    "can_edit_document_content",
+    "is_document_locked",
+    "strip_protected_fields",
+    "PROTECTED_APPROVAL_FIELDS",
     "CanViewAnnualReport",
     "CanEditAnnualReport",
     "CanPublishAnnualReport",

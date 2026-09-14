@@ -31,7 +31,7 @@ repos:
 
   # Import sorting with isort
   - repo: https://github.com/PyCQA/isort
-    rev: 5.13.2
+    rev: 9.0.1
     hooks:
       - id: isort
         args: [--profile=black, --line-length=88]

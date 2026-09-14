@@ -360,12 +360,21 @@ class ProjectDetails(APIView):
             "project_closure": None,
         }
 
+        # Context enabling edit-exception fields on nested documents so the
+        # frontend can determine temporary edit access and admin management.
+        doc_context = {
+            "request": request,
+            "include_edit_exception_details": True,
+        }
+
         # Get concept plan
         try:
             concept_plan = ConceptPlan.objects.select_related(
                 "document", "document__project"
             ).get(project=project)
-            documents["concept_plan"] = TinyConceptPlanSerializer(concept_plan).data
+            documents["concept_plan"] = TinyConceptPlanSerializer(
+                concept_plan, context=doc_context
+            ).data
         except ConceptPlan.DoesNotExist:
             pass
 
@@ -374,7 +383,9 @@ class ProjectDetails(APIView):
             project_plan = ProjectPlan.objects.select_related(
                 "document", "document__project"
             ).get(project=project)
-            documents["project_plan"] = TinyProjectPlanSerializer(project_plan).data
+            documents["project_plan"] = TinyProjectPlanSerializer(
+                project_plan, context=doc_context
+            ).data
         except ProjectPlan.DoesNotExist:
             pass
 
@@ -385,7 +396,7 @@ class ProjectDetails(APIView):
             .order_by("-year", "-id")
         )
         documents["progress_reports"] = TinyProgressReportSerializer(
-            progress_reports, many=True
+            progress_reports, many=True, context=doc_context
         ).data
 
         # Get student reports
@@ -395,7 +406,7 @@ class ProjectDetails(APIView):
             .order_by("-id")
         )
         documents["student_reports"] = TinyStudentReportSerializer(
-            student_reports, many=True
+            student_reports, many=True, context=doc_context
         ).data
 
         # Get project closure
@@ -404,7 +415,7 @@ class ProjectDetails(APIView):
                 "document", "document__project"
             ).get(project=project)
             documents["project_closure"] = TinyProjectClosureSerializer(
-                project_closure
+                project_closure, context=doc_context
             ).data
         except ProjectClosure.DoesNotExist:
             pass

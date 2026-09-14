@@ -17,6 +17,8 @@ import { DocumentTabLayout } from "@/shared/components/documents";
 import { InlineSaveEditor } from "@/shared/components/editor";
 import { ProjectSection } from "@/shared/components/ProjectSection";
 import { ReopenProjectModal } from "../modals/ReopenProjectModal";
+import { ManageEditExceptionsModal } from "../modals/ManageEditExceptionsModal";
+import { Button } from "@/shared/components/ui/button";
 import { Alert, AlertDescription } from "@/shared/components/ui/alert";
 import {
 	Select,
@@ -26,7 +28,7 @@ import {
 	SelectValue,
 } from "@/shared/components/ui/select";
 import { Label } from "@/shared/components/ui/label";
-import { Lock } from "lucide-react";
+import { Lock, LockOpen } from "lucide-react";
 import { useUpdateContent } from "@/shared/hooks/queries/useUpdateContent";
 import { CommentSection } from "@/features/projects/components/comments";
 
@@ -60,6 +62,7 @@ export function ProjectClosureTab({
 }: ProjectClosureTabProps) {
 	// Modal state for reopen project action
 	const [isReopenModalOpen, setIsReopenModalOpen] = useState(false);
+	const [isManageAccessModalOpen, setIsManageAccessModalOpen] = useState(false);
 	const { data: currentUser } = useCurrentUser();
 
 	// Update mutation for intended_outcome
@@ -87,13 +90,21 @@ export function ProjectClosureTab({
 
 	// Lock rich text editing when document is fully approved
 	const isLocked = isRichTextLocked(projectClosure.document);
+	const hasActiveException =
+		projectClosure.document.current_user_has_edit_exception ?? false;
 	const canEdit = getEffectiveCanEdit(
 		canEditBase,
 		projectClosure.document,
 		false,
-		currentUser?.is_superuser
+		currentUser?.is_superuser,
+		hasActiveException
 	);
-	const lockedMessage = getLockedMessage(projectClosure.document, isLocked);
+	const lockedMessage = getLockedMessage(
+		projectClosure.document,
+		isLocked,
+		undefined,
+		hasActiveException
+	);
 
 	// Handle intended outcome change
 	const handleIntendedOutcomeChange = (value: string) => {
@@ -128,11 +139,40 @@ export function ProjectClosureTab({
 				<div className="space-y-6">
 					{/* Locked banner */}
 					{isLocked && (
-						<Alert className="border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800">
-							<Lock className="size-4 text-gray-500 dark:text-gray-400" />
-							<AlertDescription className="text-gray-600 dark:text-gray-400">
-								This document is locked because it has been fully approved.
-								Content can still be copied.
+						<Alert
+							className={
+								hasActiveException
+									? "border-amber-400 dark:border-amber-600 bg-amber-100 dark:bg-amber-950/40"
+									: "border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800"
+							}
+						>
+							{hasActiveException ? (
+								<LockOpen className="size-4 text-amber-600 dark:text-amber-400" />
+							) : (
+								<Lock className="size-4 text-gray-500 dark:text-gray-400" />
+							)}
+							<AlertDescription
+								className={`flex items-center justify-between gap-4 ${
+									hasActiveException
+										? "font-medium text-amber-800 dark:text-amber-200"
+										: "text-gray-600 dark:text-gray-400"
+								}`}
+							>
+								<span>
+									{hasActiveException
+										? "You have temporary access to edit this locked document."
+										: "This document is locked because it has been fully approved. Content can still be copied."}
+								</span>
+								{currentUser?.is_superuser && (
+									<Button
+										size="sm"
+										variant="outline"
+										className="shrink-0"
+										onClick={() => setIsManageAccessModalOpen(true)}
+									>
+										Manage edit access
+									</Button>
+								)}
 							</AlertDescription>
 						</Alert>
 					)}
@@ -239,6 +279,15 @@ export function ProjectClosureTab({
 			</DocumentTabLayout>
 
 			{/* Reopen Project Modal */}
+			{currentUser?.is_superuser && (
+				<ManageEditExceptionsModal
+					isOpen={isManageAccessModalOpen}
+					onClose={() => setIsManageAccessModalOpen(false)}
+					documentId={projectClosure.document.id}
+					projectId={project.id}
+				/>
+			)}
+
 			<ReopenProjectModal
 				isOpen={isReopenModalOpen}
 				onClose={() => setIsReopenModalOpen(false)}

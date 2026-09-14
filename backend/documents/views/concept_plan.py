@@ -10,9 +10,11 @@ from rest_framework.status import (
     HTTP_201_CREATED,
     HTTP_204_NO_CONTENT,
     HTTP_400_BAD_REQUEST,
+    HTTP_403_FORBIDDEN,
 )
 from rest_framework.views import APIView
 
+from ..permissions import can_edit_document_content
 from ..serializers import (
     ConceptPlanCreateSerializer,
     ConceptPlanSerializer,
@@ -21,6 +23,13 @@ from ..serializers import (
 from ..services.concept_plan_service import ConceptPlanService
 from ..services.document_service import DocumentService
 from ..utils.html_tables import json_to_html_table
+
+LOCKED_DOCUMENT_ERROR = {
+    "detail": (
+        "This document is locked and you do not have an active edit exception. "
+        "Contact an administrator to request temporary edit access."
+    )
+}
 
 
 class ConceptPlans(APIView):
@@ -81,13 +90,42 @@ class ConceptPlanDetail(APIView):
 
     permission_classes = [IsAuthenticated]
 
+    @staticmethod
+    def _get_document_for_edit(pk):
+        """
+        Resolve the ProjectDocument for a concept plan update.
+
+        Updates address the ConceptPlan by its own primary key (matching
+        ConceptPlanService.update_concept_plan). Returns the related document,
+        or None if the concept plan does not exist so the downstream service
+        can raise the appropriate not-found response.
+        """
+        from ..models import ConceptPlan
+
+        concept_plan = (
+            ConceptPlan.objects.filter(pk=pk)
+            .select_related(
+                "document",
+                "document__project",
+                "document__project__business_area",
+            )
+            .first()
+        )
+        return concept_plan.document if concept_plan else None
+
     def get(self, request, pk):
         """Get concept plan by ID"""
         document = DocumentService.get_document(pk)
         data = ConceptPlanService.get_concept_plan_data(document)
 
         if "details" in data:
-            serializer = ConceptPlanSerializer(data["details"])
+            serializer = ConceptPlanSerializer(
+                data["details"],
+                context={
+                    "request": request,
+                    "include_edit_exception_details": True,
+                },
+            )
             return Response(serializer.data, status=HTTP_200_OK)
 
         return Response(
@@ -97,6 +135,16 @@ class ConceptPlanDetail(APIView):
     def patch(self, request, pk):
         """Partial update concept plan"""
         settings.LOGGER.info(f"{request.user} is updating concept plan (pk={pk})")
+
+        document = self._get_document_for_edit(pk)
+        if document is not None and not can_edit_document_content(
+            request.user, document
+        ):
+            settings.LOGGER.warning(
+                f"{request.user} was denied editing locked concept plan (pk={pk})"
+            )
+            return Response(LOCKED_DOCUMENT_ERROR, status=HTTP_403_FORBIDDEN)
+
         serializer = ConceptPlanUpdateSerializer(data=request.data, partial=True)
 
         if not serializer.is_valid():
@@ -118,6 +166,16 @@ class ConceptPlanDetail(APIView):
     def put(self, request, pk):
         """Full update concept plan"""
         settings.LOGGER.info(f"{request.user} is updating concept plan (pk={pk})")
+
+        document = self._get_document_for_edit(pk)
+        if document is not None and not can_edit_document_content(
+            request.user, document
+        ):
+            settings.LOGGER.warning(
+                f"{request.user} was denied editing locked concept plan (pk={pk})"
+            )
+            return Response(LOCKED_DOCUMENT_ERROR, status=HTTP_403_FORBIDDEN)
+
         serializer = ConceptPlanUpdateSerializer(data=request.data, partial=False)
 
         if not serializer.is_valid():

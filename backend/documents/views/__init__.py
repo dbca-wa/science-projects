@@ -62,6 +62,9 @@ from .crud import ProjectDocsPendingMyAction, ProjectDocumentDetail, ProjectDocu
 # Custom publication views
 from .custom_publication import CustomPublicationDetail, CustomPublications
 
+# Edit exception views
+from .edit_exception import DocumentEditExceptionDetail, DocumentEditExceptions
+
 # Endorsement views
 from .endorsement import (
     DeleteAECEndorsement,
@@ -117,6 +120,9 @@ __all__ = [
     "ProjectDocuments",
     "ProjectDocumentDetail",
     "ProjectDocsPendingMyAction",
+    # Edit exceptions
+    "DocumentEditExceptions",
+    "DocumentEditExceptionDetail",
     # Approval
     "DocApproval",
     "DocRecall",

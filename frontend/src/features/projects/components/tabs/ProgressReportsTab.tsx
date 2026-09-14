@@ -26,9 +26,10 @@ import {
 	TooltipContent,
 	TooltipTrigger,
 } from "@/shared/components/ui/tooltip";
-import { Loader2, Lock, Plus } from "lucide-react";
+import { Loader2, Lock, LockOpen, Plus } from "lucide-react";
 import { CommentSection } from "@/features/projects/components/comments";
 import { CreateProgressReportModal } from "@/features/projects/components/modals/CreateProgressReportModal";
+import { ManageEditExceptionsModal } from "@/features/projects/components/modals/ManageEditExceptionsModal";
 
 interface ProgressReportsTabProps {
 	progressReports: IProgressReport[];
@@ -118,6 +119,7 @@ export const ProgressReportsTab = ({
 
 	// Modal state for creating new progress reports
 	const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+	const [isManageAccessModalOpen, setIsManageAccessModalOpen] = useState(false);
 
 	// Build year → status map for the YearSelector warning icons
 	// NOTE: Must be called before early returns (React hooks rule)
@@ -168,16 +170,20 @@ export const ProgressReportsTab = ({
 	// Lock report creation if project is terminated/completed or has approved closure
 	const isCreationLocked = isReportCreationLocked(project, all_documents);
 
+	const hasActiveException =
+		selectedReport.document.current_user_has_edit_exception ?? false;
 	const canEdit = getEffectiveCanEdit(
 		canEditBase,
 		selectedReport.document,
 		isLocked,
-		currentUser?.is_superuser
+		currentUser?.is_superuser,
+		hasActiveException
 	);
 	const lockedMessage = getLockedMessage(
 		selectedReport.document,
 		isLocked,
-		"This report is locked because a newer report exists."
+		"This report is locked because a newer report exists.",
+		hasActiveException
 	);
 
 	return (
@@ -235,11 +241,40 @@ export const ProgressReportsTab = ({
 				<div className="space-y-6">
 					{/* Locked banner for older reports */}
 					{isLocked && (
-						<Alert className="border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800">
-							<Lock className="size-4 text-gray-500 dark:text-gray-400" />
-							<AlertDescription className="text-gray-600 dark:text-gray-400">
-								This report is locked because a newer report exists. Content can
-								still be copied.
+						<Alert
+							className={
+								hasActiveException
+									? "border-amber-400 dark:border-amber-600 bg-amber-100 dark:bg-amber-950/40"
+									: "border-gray-300 dark:border-gray-600 bg-gray-100 dark:bg-gray-800"
+							}
+						>
+							{hasActiveException ? (
+								<LockOpen className="size-4 text-amber-600 dark:text-amber-400" />
+							) : (
+								<Lock className="size-4 text-gray-500 dark:text-gray-400" />
+							)}
+							<AlertDescription
+								className={`flex items-center justify-between gap-4 ${
+									hasActiveException
+										? "font-medium text-amber-800 dark:text-amber-200"
+										: "text-gray-600 dark:text-gray-400"
+								}`}
+							>
+								<span>
+									{hasActiveException
+										? "You have temporary access to edit this locked report."
+										: "This report is locked because a newer report exists. Content can still be copied."}
+								</span>
+								{currentUser?.is_superuser && (
+									<Button
+										size="sm"
+										variant="outline"
+										className="shrink-0"
+										onClick={() => setIsManageAccessModalOpen(true)}
+									>
+										Manage edit access
+									</Button>
+								)}
 							</AlertDescription>
 						</Alert>
 					)}
@@ -320,6 +355,15 @@ export const ProgressReportsTab = ({
 					</ProjectSection>
 				</div>
 			</DocumentTabLayout>
+
+			{currentUser?.is_superuser && (
+				<ManageEditExceptionsModal
+					isOpen={isManageAccessModalOpen}
+					onClose={() => setIsManageAccessModalOpen(false)}
+					documentId={selectedReport.document.id}
+					projectId={projectId}
+				/>
+			)}
 
 			{/* Create Progress Report Modal */}
 			<CreateProgressReportModal
