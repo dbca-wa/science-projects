@@ -137,25 +137,55 @@ export const getEffectiveCanEdit = (
 	canEditBase: boolean,
 	document: IMainDoc,
 	isTabLocked: boolean,
-	isSuperuser = false
+	isSuperuser = false,
+	hasActiveException = false
 ): boolean => {
 	// Superusers bypass all document locking for content editing
 	if (isSuperuser) return true;
+	// A user with an active edit exception may edit the locked document
+	if (hasActiveException) return true;
 	if (isTabLocked) return false;
 	if (isRichTextLocked(document)) return false;
 	return canEditBase;
 };
 
 /**
- * Get a human-readable message explaining why a document field is locked.
+ * Format an expiry timestamp into a short, human-readable date and time.
+ */
+const formatExpiry = (expiresAt?: string): string | undefined => {
+	if (!expiresAt) return undefined;
+	const date = new Date(expiresAt);
+	if (Number.isNaN(date.getTime())) return undefined;
+	return date.toLocaleString(undefined, {
+		day: "numeric",
+		month: "short",
+		year: "numeric",
+		hour: "numeric",
+		minute: "2-digit",
+	});
+};
+
+/**
+ * Get a human-readable message explaining why a document field is locked, or
+ * that the current user has temporary edit access under an exception.
  *
- * Returns undefined if the field is not locked (no message needed).
+ * Returns undefined if the field is editable with no message needed.
  */
 export const getLockedMessage = (
 	document: IMainDoc,
 	isTabLocked: boolean,
-	tabLockedReason?: string
+	tabLockedReason?: string,
+	hasActiveException = false,
+	exceptionExpiresAt?: string
 ): string | undefined => {
+	// When the user holds an active exception, communicate the temporary
+	// access rather than a read-only lock message.
+	if (hasActiveException) {
+		const expiry = formatExpiry(exceptionExpiresAt);
+		return expiry
+			? `You have temporary edit access to this locked document until ${expiry}.`
+			: "You have temporary edit access to this locked document.";
+	}
 	if (isTabLocked && tabLockedReason) return tabLockedReason;
 	if (isTabLocked)
 		return "This document is locked. The project has progressed past this stage.";

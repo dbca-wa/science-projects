@@ -12,11 +12,20 @@ from rest_framework.status import (
     HTTP_202_ACCEPTED,
     HTTP_204_NO_CONTENT,
     HTTP_400_BAD_REQUEST,
+    HTTP_403_FORBIDDEN,
 )
 from rest_framework.views import APIView
 
 from ..models import Endorsement, ProjectPlan
+from ..permissions import can_edit_document_content, strip_protected_fields
 from ..serializers import ProjectPlanSerializer, TinyProjectPlanSerializer
+
+LOCKED_DOCUMENT_ERROR = {
+    "detail": (
+        "This document is locked and you do not have an active edit exception. "
+        "Contact an administrator to request temporary edit access."
+    )
+}
 
 
 class ProjectPlans(APIView):
@@ -115,7 +124,7 @@ class ProjectPlanDetail(APIView):
 
         serializer = ProjectPlanSerializer(
             project_plan,
-            context={"request": request},
+            context={"request": request, "include_edit_exception_details": True},
         )
         return Response(serializer.data, status=HTTP_200_OK)
 
@@ -129,6 +138,15 @@ class ProjectPlanDetail(APIView):
             project_plan = ProjectPlan.objects.get(pk=pk)
         except ProjectPlan.DoesNotExist:
             raise NotFound
+
+        if not can_edit_document_content(request.user, project_plan.document):
+            settings.LOGGER.warning(
+                f"{request.user} was denied editing locked project plan {pk}"
+            )
+            return Response(LOCKED_DOCUMENT_ERROR, status=HTTP_403_FORBIDDEN)
+
+        # Approval-state fields can never be changed through a content edit.
+        data = strip_protected_fields(request.data)
 
         # Handle endorsement updates
         if (
@@ -165,7 +183,7 @@ class ProjectPlanDetail(APIView):
 
         serializer = ProjectPlanSerializer(
             project_plan,
-            data=request.data,
+            data=data,
             partial=True,
         )
 
@@ -193,6 +211,15 @@ class ProjectPlanDetail(APIView):
         except ProjectPlan.DoesNotExist:
             raise NotFound
 
+        if not can_edit_document_content(request.user, project_plan.document):
+            settings.LOGGER.warning(
+                f"{request.user} was denied editing locked project plan {pk}"
+            )
+            return Response(LOCKED_DOCUMENT_ERROR, status=HTTP_403_FORBIDDEN)
+
+        # Approval-state fields can never be changed through a content edit.
+        data = strip_protected_fields(request.data)
+
         # Handle endorsement updates
         if (
             "data_management" in request.data
@@ -228,7 +255,7 @@ class ProjectPlanDetail(APIView):
 
         serializer = ProjectPlanSerializer(
             project_plan,
-            data=request.data,
+            data=data,
             partial=True,  # Allow partial updates for PUT as well
         )
 

@@ -31,6 +31,11 @@ echo "📦 Installing dependencies..."
 poetry install
 echo ""
 
+# Align pre-commit hook revisions with the installed tool versions
+echo "🔗 Syncing pre-commit revisions with Poetry versions..."
+./.pre-commit-sync-versions.sh
+echo ""
+
 # Install pre-commit hooks
 echo "🔧 Installing pre-commit hooks..."
 poetry run pre-commit install

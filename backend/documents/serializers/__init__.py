@@ -49,6 +49,12 @@ from .custom_publication import (
     TinyCustomPublicationSerializer,
 )
 
+# Edit exception serializers
+from .edit_exception import (
+    DocumentEditExceptionSerializer,
+    EditExceptionUserSerializer,
+)
+
 # Progress report serializers
 from .progress_report import (
     ProgressReportCreateSerializer,
@@ -131,4 +137,7 @@ __all__ = [
     # Annual report PDF generation
     "OptimisedProgressReportAnnualReportSerializer",
     "OptimisedStudentReportAnnualReportSerializer",
+    # Edit exceptions
+    "DocumentEditExceptionSerializer",
+    "EditExceptionUserSerializer",
 ]

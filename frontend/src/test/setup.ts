@@ -1,6 +1,6 @@
-import { afterEach, beforeAll, vi } from "vitest";
+import { afterEach, beforeAll, expect, vi } from "vitest";
 import { cleanup } from "@testing-library/react";
-import "@testing-library/jest-dom";
+import "@testing-library/jest-dom/vitest";
 import { toHaveNoViolations } from "jest-axe";
 import { JSDOM } from "jsdom";
 

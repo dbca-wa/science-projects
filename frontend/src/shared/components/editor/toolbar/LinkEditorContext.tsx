@@ -102,4 +102,5 @@ export function LinkEditorProvider({ children }: { children: ReactNode }) {
 }
 
 // Context exported for use by useLinkEditor hook in link-editor.utils.ts
+// eslint-disable-next-line react-refresh/only-export-components
 export { LinkEditorContext };

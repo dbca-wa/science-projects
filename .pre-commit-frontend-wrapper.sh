@@ -25,7 +25,9 @@ export CHANGED_FILES="$FRONTEND_FILES"
 # Run each hook manually in order
 echo "→ Running Prettier (formatting)..."
 if command -v bun &> /dev/null && [ -n "$FRONTEND_FILES" ]; then
-    echo "$FRONTEND_FILES" | xargs bunx prettier --write || true
+    # --ignore-unknown skips files Prettier has no parser for (e.g. shell
+    # scripts, lockfiles) instead of erroring on them.
+    echo "$FRONTEND_FILES" | xargs bunx prettier --write --ignore-unknown || true
 fi
 
 echo "→ Running ESLint (linting - warnings only)..."

@@ -9,6 +9,7 @@ import {
 	hasApprovedProjectClosure,
 	isReportCreationLocked,
 	getEffectiveCanEdit,
+	getLockedMessage,
 } from "./document-locking.utils";
 import type { IMainDoc } from "@/shared/types/document.types";
 import type {
@@ -258,6 +259,52 @@ describe("document-locking.utils", () => {
 		it("does not grant superuser bypass when isSuperuser is undefined", () => {
 			const doc = makeDocument({ status: "approved" });
 			expect(getEffectiveCanEdit(true, doc, false, undefined)).toBe(false);
+		});
+
+		it("grants edit access to a user with an active exception on a locked tab", () => {
+			const doc = makeDocument({ status: "approved" });
+			expect(getEffectiveCanEdit(false, doc, true, false, true)).toBe(true);
+		});
+
+		it("grants edit access with an active exception on a fully approved document", () => {
+			const doc = makeDocument({ status: "approved" });
+			expect(getEffectiveCanEdit(false, doc, false, false, true)).toBe(true);
+		});
+
+		it("does not grant access without an exception on a locked document", () => {
+			const doc = makeDocument({ status: "approved" });
+			expect(getEffectiveCanEdit(true, doc, true, false, false)).toBe(false);
+		});
+	});
+
+	describe("getLockedMessage", () => {
+		it("returns undefined when the document is editable", () => {
+			const doc = makeDocument({ status: "new" });
+			expect(getLockedMessage(doc, false)).toBeUndefined();
+		});
+
+		it("returns the approved lock message when fully approved", () => {
+			const doc = makeDocument({ status: "approved" });
+			expect(getLockedMessage(doc, false)).toContain("fully approved");
+		});
+
+		it("returns a temporary-access message when the user has an active exception", () => {
+			const doc = makeDocument({ status: "approved" });
+			const message = getLockedMessage(doc, true, undefined, true);
+			expect(message).toContain("temporary edit access");
+		});
+
+		it("includes the expiry date when provided with an active exception", () => {
+			const doc = makeDocument({ status: "approved" });
+			const message = getLockedMessage(
+				doc,
+				true,
+				undefined,
+				true,
+				"2099-01-15T10:00:00Z"
+			);
+			expect(message).toContain("temporary edit access");
+			expect(message).toContain("2099");
 		});
 	});
 });

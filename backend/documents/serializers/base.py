@@ -19,9 +19,45 @@ class TinyProjectDocumentSerializer(serializers.ModelSerializer):
     project = TinyProjectSerializer(read_only=True)
     created_year = serializers.SerializerMethodField()
     pdf = ProjectDocumentPDFSerializer(read_only=True)
+    current_user_has_edit_exception = serializers.SerializerMethodField()
+    active_edit_exceptions = serializers.SerializerMethodField()
 
     def get_created_year(self, obj):
         return obj.created_at.year
+
+    def get_current_user_has_edit_exception(self, obj):
+        """
+        Whether the requesting user currently holds an active edit exception.
+
+        Only computed on detail reads (where the context flag
+        `include_edit_exception_details` is set) to avoid per-row queries on
+        list endpoints. Returns False elsewhere.
+        """
+        if not self.context.get("include_edit_exception_details"):
+            return False
+        request = self.context.get("request")
+        if not request or not request.user or not request.user.is_authenticated:
+            return False
+        from ..services.edit_exception_service import EditExceptionService
+
+        return EditExceptionService.has_active_exception(request.user, obj)
+
+    def get_active_edit_exceptions(self, obj):
+        """
+        Active exceptions for this document, exposed only to administrators on
+        detail reads (where `include_edit_exception_details` is set) for the
+        management UI. Returns None otherwise.
+        """
+        if not self.context.get("include_edit_exception_details"):
+            return None
+        request = self.context.get("request")
+        if not request or not request.user or not request.user.is_superuser:
+            return None
+        from ..services.edit_exception_service import EditExceptionService
+        from .edit_exception import DocumentEditExceptionSerializer
+
+        active = EditExceptionService.list_active(obj)
+        return DocumentEditExceptionSerializer(active, many=True).data
 
     class Meta:
         model = ProjectDocument
@@ -40,6 +76,8 @@ class TinyProjectDocumentSerializer(serializers.ModelSerializer):
             "directorate_approval_granted",
             "pdf",
             "pdf_generation_in_progress",
+            "current_user_has_edit_exception",
+            "active_edit_exceptions",
         ]
 
 

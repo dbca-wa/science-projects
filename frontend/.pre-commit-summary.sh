@@ -12,6 +12,7 @@ BLUE='\033[0;34m'
 NC='\033[0m'
 
 ISSUES_FOUND=0
+WARNINGS_FOUND=0
 
 # Force output to stderr
 exec 1>&2
@@ -46,6 +47,7 @@ run_check() {
             echo -e "${YELLOW}⚠ ${check_name} warnings:${NC}"
             cat /tmp/precommit_output.txt
             echo ""
+            WARNINGS_FOUND=1
         fi
     fi
 
@@ -79,7 +81,12 @@ echo -e "${BLUE}╚════════════════════�
 echo ""
 
 if [ $ISSUES_FOUND -eq 0 ]; then
-    echo -e "${GREEN}✓ All checks passed! Proceeding with commit...${NC}"
+    if [ $WARNINGS_FOUND -eq 0 ]; then
+        echo -e "${GREEN}✓ All checks passed! Proceeding with commit...${NC}"
+    else
+        echo -e "${YELLOW}⚠ Committing with lint warnings (not blocked).${NC}"
+        echo -e "${YELLOW}  These will FAIL the push and CI. Fix them before you push.${NC}"
+    fi
     echo ""
     echo -e "${BLUE}Total execution time: ${DURATION}s${NC}"
     echo ""

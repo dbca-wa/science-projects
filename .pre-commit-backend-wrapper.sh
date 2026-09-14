@@ -22,6 +22,20 @@ BACKEND_FILES=$(echo "$CHANGED_FILES" | sed 's|^backend/||')
 # Export files for hooks that need them
 export CHANGED_FILES="$BACKEND_FILES"
 
+# If dependency files changed, keep the pre-commit config's pinned tool
+# revisions aligned with the Poetry-installed versions, then re-stage it.
+if echo "$BACKEND_FILES" | grep -qE '^(pyproject\.toml|poetry\.lock)$'; then
+    echo "→ Syncing pre-commit revisions with Poetry versions..."
+    if [ -f .pre-commit-sync-versions.sh ]; then
+        ./.pre-commit-sync-versions.sh || true
+        # Re-stage the config if the sync changed it (cwd is backend/).
+        if ! git diff --quiet .pre-commit-config.yaml 2>/dev/null; then
+            git add .pre-commit-config.yaml
+            echo "  Updated backend/.pre-commit-config.yaml to match Poetry."
+        fi
+    fi
+fi
+
 # Run each hook manually in order
 echo "→ Running Black (formatting)..."
 if command -v poetry &> /dev/null && [ -n "$BACKEND_FILES" ]; then

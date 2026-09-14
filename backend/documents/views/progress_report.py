@@ -12,11 +12,20 @@ from rest_framework.status import (
     HTTP_202_ACCEPTED,
     HTTP_204_NO_CONTENT,
     HTTP_400_BAD_REQUEST,
+    HTTP_403_FORBIDDEN,
 )
 from rest_framework.views import APIView
 
 from ..models import ProgressReport
+from ..permissions import can_edit_document_content
 from ..serializers import ProgressReportSerializer, TinyProgressReportSerializer
+
+LOCKED_DOCUMENT_ERROR = {
+    "detail": (
+        "This document is locked and you do not have an active edit exception. "
+        "Contact an administrator to request temporary edit access."
+    )
+}
 
 
 class ProgressReports(APIView):
@@ -110,7 +119,7 @@ class ProgressReportDetail(APIView):
 
         serializer = ProgressReportSerializer(
             progress_report,
-            context={"request": request},
+            context={"request": request, "include_edit_exception_details": True},
         )
         return Response(serializer.data, status=HTTP_200_OK)
 
@@ -210,6 +219,12 @@ class UpdateProgressReport(APIView):
         if not report:
             raise NotFound
 
+        if not can_edit_document_content(request.user, report.document):
+            settings.LOGGER.warning(
+                f"{request.user} was denied editing locked progress report {report.pk}"
+            )
+            return Response(LOCKED_DOCUMENT_ERROR, status=HTTP_403_FORBIDDEN)
+
         section = request.data["section"]
         html_data = request.data["html"]
 
@@ -274,6 +289,6 @@ class ProgressReportByYear(APIView):
 
         serializer = ProgressReportSerializer(
             progress_report,
-            context={"request": request},
+            context={"request": request, "include_edit_exception_details": True},
         )
         return Response(serializer.data, status=HTTP_200_OK)

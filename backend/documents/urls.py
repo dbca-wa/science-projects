@@ -55,6 +55,15 @@ urlpatterns = [
     path("spawn", views.DocumentSpawner.as_view()),
     path("projectdocuments", views.ProjectDocuments.as_view()),
     path("projectdocuments/<int:pk>", views.ProjectDocumentDetail.as_view()),
+    # Edit exceptions ========================================================
+    path(
+        "projectdocuments/<int:pk>/edit-exceptions",
+        views.DocumentEditExceptions.as_view(),
+    ),
+    path(
+        "edit-exceptions/<int:exception_pk>",
+        views.DocumentEditExceptionDetail.as_view(),
+    ),
     path("conceptplans", views.ConceptPlans.as_view()),
     path("conceptplans/<int:pk>", views.ConceptPlanDetail.as_view()),
     path("projectplans", views.ProjectPlans.as_view()),

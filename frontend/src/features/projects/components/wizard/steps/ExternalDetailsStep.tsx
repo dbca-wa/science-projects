@@ -14,6 +14,7 @@ import { shouldShowError } from "../validation-helpers";
  * Stable RTE wrapper — memoised so it never re-renders from parent
  * observer updates. Prevents Lexical focus loss.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 const StableAimsEditor = memo(
 	({
 		initialValue,

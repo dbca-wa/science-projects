@@ -1,3 +1,8 @@
+// This file co-locates route guard components with small module-level
+// constants (division slugs, dev flag). react-refresh/only-export-components
+// flags the mixed exports, but these constants are not hot-reloadable state
+// and splitting them out would fragment cohesive guard logic.
+/* eslint-disable react-refresh/only-export-components */
 import { useMemo } from "react";
 import { Navigate, useLocation } from "react-router";
 import { observer } from "mobx-react-lite";
@@ -17,7 +22,6 @@ const IS_LOCAL_DEV = import.meta.env.DEV;
  * If the backend is down, the user sees a clean white page instead of
  * a login form. They can refresh when ready.
  */
-// eslint-disable-next-line react-refresh/only-export-components
 const UnauthenticatedFallback = () => {
 	return (
 		<div className="min-h-screen flex items-center justify-center bg-white dark:bg-gray-900">
@@ -108,7 +112,6 @@ AdminRoute.displayName = "AdminRoute";
  * Inner component that checks key_stakeholder status using hooks.
  * Separated from the observer wrapper so hooks can be called unconditionally.
  */
-// eslint-disable-next-line react-refresh/only-export-components
 const KeyStakeholderCheck = ({ children }: { children: React.ReactNode }) => {
 	const { data: currentUser } = useCurrentUser();
 	const { data: divisions, isLoading } = useDivisions();

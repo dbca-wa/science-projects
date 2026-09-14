@@ -16,6 +16,7 @@ import { SectionCard } from "../SectionCard";
  * MobX store changes. The RTE manages its own internal state; onChange
  * pushes updates to the store without causing a re-render of this wrapper.
  */
+// eslint-disable-next-line react-refresh/only-export-components
 const StableTitleEditor = memo(
 	({
 		initialValue,
@@ -38,6 +39,7 @@ const StableTitleEditor = memo(
 );
 StableTitleEditor.displayName = "StableTitleEditor";
 
+// eslint-disable-next-line react-refresh/only-export-components
 const StableDescriptionEditor = memo(
 	({
 		initialValue,

@@ -46,9 +46,31 @@ repos:
         pass_filenames: false
         verbose: true
 
+  # Pre-push enforcement (BLOCKING). Commit freely with warnings; push must be clean.
+  - repo: local
+    hooks:
+      - id: frontend-push-checks
+        name: Frontend pre-push checks (blocking)
+        entry: ./.pre-push-frontend-wrapper.sh
+        language: script
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false
+        verbose: true
+      - id: backend-push-checks
+        name: Backend pre-push checks (blocking)
+        entry: ./.pre-push-backend-wrapper.sh
+        language: script
+        stages: [pre-push]
+        always_run: true
+        pass_filenames: false
+        verbose: true
+
 # Global settings
 fail_fast: false
 minimum_pre_commit_version: '3.0.0'
+# Install both commit-time and push-time hooks when running `pre-commit install`.
+default_install_hook_types: [pre-commit, pre-push]
 
 # Exclude patterns
 exclude: |

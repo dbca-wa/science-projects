@@ -46,6 +46,27 @@ export interface ISmallUserWithAvatar {
 	image: string;
 }
 
+/** Compact user representation returned with edit exceptions and eligibility. */
+export interface IEditExceptionUser {
+	id: number;
+	display_first_name: string | null;
+	display_last_name: string | null;
+	name: string;
+	email: string;
+	image: string | null;
+}
+
+/** A time-limited grant allowing a user to edit a locked document. */
+export interface IDocumentEditException {
+	id: number;
+	document: number;
+	user: IEditExceptionUser;
+	granted_by: IEditExceptionUser | null;
+	expires_at: string;
+	created_at: string;
+	is_active: boolean;
+}
+
 export interface IMainDoc {
 	id: number;
 	// report?: ISmallReport;
@@ -63,6 +84,10 @@ export interface IMainDoc {
 	pdf_generation_in_progress: boolean;
 	pdf: IProjectDocPDF;
 	for_user?: ISmallUserWithAvatar;
+	/** True when the requesting user currently holds an active edit exception. */
+	current_user_has_edit_exception?: boolean;
+	/** Active exceptions for this document; populated for admins on detail reads. */
+	active_edit_exceptions?: IDocumentEditException[] | null;
 }
 
 interface IProjectDocPDF {
@@ -187,11 +212,7 @@ export type AnnualReportSection =
 	| "student_intro"
 	| "publications";
 export type ProjectSection =
-	| "title"
-	| "description"
-	| "tagline"
-	| "externalDescription"
-	| "externalAims";
+	"title" | "description" | "tagline" | "externalDescription" | "externalAims";
 export type ConceptPlanSection =
 	| "background"
 	| "aims"
@@ -214,11 +235,7 @@ export type ProjectPlanSection =
 	| "operating_budget_external"
 	| "related_projects";
 export type ProgressReportSection =
-	| "context"
-	| "aims"
-	| "progress"
-	| "implications"
-	| "future";
+	"context" | "aims" | "progress" | "implications" | "future";
 export type StudentReportSection = "progress_report";
 export type ProjectClosureSection =
 	| "reason"
