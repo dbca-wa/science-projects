@@ -23,7 +23,7 @@ repos:
 
   # Python code formatting with black
   - repo: https://github.com/psf/black
-    rev: 24.10.0
+    rev: 26.5.1
     hooks:
       - id: black
         language_version: python3.13
@@ -38,7 +38,7 @@ repos:
 
   # Remove unused imports and variables with autoflake
   - repo: https://github.com/PyCQA/autoflake
-    rev: v2.3.1
+    rev: v2.4.0
     hooks:
       - id: autoflake
         args:
