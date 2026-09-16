@@ -1,4 +1,4 @@
-import { useQuery, useMutation } from "@tanstack/react-query";
+import { useQuery, useMutation, useQueryClient } from "@tanstack/react-query";
 import { apiClient } from "@/shared/services/api/client.service";
 import { toast } from "sonner";
 
@@ -20,12 +20,17 @@ interface SendAnnouncementResponse {
 
 /** Send announcement emails to selected recipient groups */
 export const useSendAnnouncement = () => {
+	const queryClient = useQueryClient();
 	return useMutation({
 		mutationFn: (data: SendAnnouncementPayload) =>
 			apiClient.post<SendAnnouncementResponse>(
 				"adminoptions/send-announcement",
 				data
 			),
+		onSuccess: () => {
+			// A new email record is created on send — refresh the history list.
+			queryClient.invalidateQueries({ queryKey: ["email-records"] });
+		},
 		onError: (error: Error) => {
 			toast.error(error.message || "Failed to send announcement");
 		},

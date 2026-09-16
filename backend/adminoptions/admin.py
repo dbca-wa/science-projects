@@ -3,7 +3,13 @@ import json
 from django.contrib import admin
 from django.utils.html import format_html
 
-from adminoptions.models import AdminOptions, AdminTask, ContentField, GuideSection
+from adminoptions.models import (
+    AdminOptions,
+    AdminTask,
+    ContentField,
+    EmailRecord,
+    GuideSection,
+)
 
 
 # Inline admin for content fields
@@ -214,3 +220,23 @@ class AdminTaskAdmin(admin.ModelAdmin):
 
     def get_queryset(self, request):
         return super().get_queryset(request).select_related("requester", "project")
+
+
+@admin.register(EmailRecord)
+class EmailRecordAdmin(admin.ModelAdmin):
+    list_display = [
+        "pk",
+        "kind",
+        "subject",
+        "initiator",
+        "emails_sent",
+        "is_test",
+        "created_at",
+    ]
+    list_filter = ["kind", "is_test"]
+    search_fields = ["subject", "initiator__username"]
+    ordering = ["-created_at"]
+    readonly_fields = ["created_at", "updated_at"]
+
+    def get_queryset(self, request):
+        return super().get_queryset(request).select_related("initiator")

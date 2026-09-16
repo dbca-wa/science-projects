@@ -319,4 +319,89 @@ class AdminTask(CommonModel):
         verbose_name_plural = "Admin Tasks"
 
 
+class EmailRecord(CommonModel):
+    """
+    Model Definition for a record of outbound correspondence.
+
+    Stores a durable record of announcement and new-reporting-cycle emails at
+    the point they are sent, so admins can browse what was communicated, when,
+    by whom, and to which recipient groups. Records are created only when at
+    least one recipient actually received the email.
+    """
+
+    class EmailKind(models.TextChoices):
+        ANNOUNCEMENT = "announcement", "Announcement"
+        NEW_CYCLE = "new_cycle", "New Reporting Cycle"
+
+    kind = models.CharField(
+        max_length=20,
+        choices=EmailKind.choices,
+        help_text="The type of correspondence that was sent",
+    )
+    subject = models.CharField(
+        max_length=255,
+        help_text="The email subject line",
+    )
+    body = models.TextField(
+        blank=True,
+        default="",
+        help_text="The sanitised HTML body sent when a single message was used for all groups",
+    )
+    group_messages = models.JSONField(
+        default=dict,
+        blank=True,
+        help_text=(
+            "Per-group sanitised HTML messages when per-group messaging was used. "
+            "Keys: ba_leads, project_leads, team_members"
+        ),
+    )
+    recipient_groups = models.JSONField(
+        default=list,
+        blank=True,
+        help_text="Groups selected for this send, e.g. ['ba_leads', 'project_leads']",
+    )
+    recipients = models.JSONField(
+        default=list,
+        blank=True,
+        help_text=(
+            "Resolved recipients captured at send time. "
+            "Each entry: {'pk': int, 'name': str, 'email': str, 'group': str}"
+        ),
+    )
+    emails_sent = models.PositiveIntegerField(
+        default=0,
+        help_text="Number of recipients that successfully received the email",
+    )
+    is_test = models.BooleanField(
+        default=False,
+        help_text=(
+            "True when the send occurred while email testing mode was active, "
+            "meaning delivery was redirected to the test user rather than the "
+            "resolved recipients. Used to distinguish test sends from official ones."
+        ),
+    )
+    initiator = models.ForeignKey(
+        "users.User",
+        on_delete=models.SET_NULL,
+        null=True,
+        blank=True,
+        related_name="sent_email_records",
+        help_text="The user who initiated the send",
+    )
+
+    def __str__(self) -> str:
+        prefix = "[TEST] " if self.is_test else ""
+        return f"{prefix}{self.get_kind_display()}: {self.subject}"
+
+    class Meta:
+        verbose_name = "Email Record"
+        verbose_name_plural = "Email Records"
+        ordering = ["-created_at"]
+        indexes = [
+            models.Index(fields=["kind", "-created_at"]),
+            models.Index(fields=["-created_at"]),
+            models.Index(fields=["is_test", "-created_at"]),
+        ]
+
+
 # endregion  =================================================================================================
