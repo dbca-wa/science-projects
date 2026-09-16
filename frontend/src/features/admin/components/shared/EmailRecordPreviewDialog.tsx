@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Loader2, Copy as CopyIcon } from "lucide-react";
 import { Button } from "@/shared/components/ui/button";
 import { Badge } from "@/shared/components/ui/badge";
@@ -56,14 +56,22 @@ export const EmailRecordPreviewDialog = ({
 		: [];
 	const hasGroupMessages = groupKeys.length > 0;
 
-	const [activeGroup, setActiveGroup] = useState<GroupKey | null>(null);
+	// Track the user's explicit group selection alongside the record it belongs
+	// to. Deriving the active group during render (rather than in an effect)
+	// avoids cascading renders: when the record changes, the previous selection
+	// is stale and we fall back to the first available group.
+	const [selection, setSelection] = useState<{
+		recordId: number;
+		group: GroupKey;
+	} | null>(null);
 
-	// Default the active group to the first available whenever detail changes.
-	useEffect(() => {
-		setActiveGroup(hasGroupMessages ? groupKeys[0] : null);
-		// groupKeys is derived from detail; keying on detail id is sufficient.
-		// eslint-disable-next-line react-hooks/exhaustive-deps
-	}, [detail?.id]);
+	const activeGroup: GroupKey | null = hasGroupMessages
+		? selection &&
+			selection.recordId === detail?.id &&
+			groupKeys.includes(selection.group)
+			? selection.group
+			: groupKeys[0]
+		: null;
 
 	const bodyToShow =
 		hasGroupMessages && activeGroup
@@ -123,7 +131,9 @@ export const EmailRecordPreviewDialog = ({
 										type="button"
 										size="sm"
 										variant={activeGroup === g ? "default" : "outline"}
-										onClick={() => setActiveGroup(g)}
+										onClick={() =>
+											detail && setSelection({ recordId: detail.id, group: g })
+										}
 									>
 										{GROUP_LABEL[g]}
 									</Button>
