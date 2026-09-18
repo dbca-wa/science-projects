@@ -55,6 +55,17 @@ global.ResizeObserver = class ResizeObserver {
 	disconnect = vi.fn();
 };
 
+// Polyfill URL.createObjectURL / revokeObjectURL for jsdom.
+// jsdom defines these methods but their implementation throws "Not
+// implemented" when called, which breaks any code that creates blob URLs
+// (compression worker, image previews, file downloads). We can't just check
+// for the method's existence — we must replace the throwing implementation
+// with a browser-like stub that returns a blob: URL. Individual tests may
+// still override these with vi.fn() and restore afterwards.
+let objectUrlCounter = 0;
+URL.createObjectURL = () => `blob:nodedata:${objectUrlCounter++}`;
+URL.revokeObjectURL = () => {};
+
 // Polyfill requestAnimationFrame / cancelAnimationFrame for jsdom
 if (typeof globalThis.requestAnimationFrame === "undefined") {
 	globalThis.requestAnimationFrame = (callback: FrameRequestCallback): number =>
