@@ -39,6 +39,8 @@ urlpatterns = [
     path("homepage-banner", views.HomepageBannerSettings.as_view()),
     path("send-announcement", views.SendAnnouncement.as_view()),
     path("announcement-email-preview", views.AnnouncementEmailPreview.as_view()),
+    path("email-records", views.EmailRecordList.as_view()),
+    path("email-records/<int:pk>", views.EmailRecordDetail.as_view()),
     # Include the router URLs at the end to avoid conflicts
     path("", include(router.urls)),
 ]

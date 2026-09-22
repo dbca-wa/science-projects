@@ -1,11 +1,18 @@
 # region IMPORTS ====================================================================================================
 from rest_framework import serializers
 
-from adminoptions.models import AdminOptions, AdminTask, ContentField, GuideSection
+from adminoptions.models import (
+    AdminOptions,
+    AdminTask,
+    ContentField,
+    EmailRecord,
+    GuideSection,
+)
 from medias.serializers import UserAvatarSerializer
 from projects.models import Project
 from users.models import User
 from users.serializers import MiniUserSerializer
+from users.utils.helpers import get_user_display_name
 
 # endregion  =================================================================================================
 
@@ -285,5 +292,48 @@ class AdminTaskSerializer(serializers.ModelSerializer):
 
 
 # Import CaretakerSerializer from the new caretakers app
+
+# endregion  =================================================================================================
+
+# region Email Record Serializers ===========================================================================
+
+
+class EmailRecordListSerializer(serializers.ModelSerializer):
+    """Lightweight serializer for the email history list (no body content)."""
+
+    initiator_name = serializers.SerializerMethodField()
+    recipient_count = serializers.SerializerMethodField()
+
+    class Meta:
+        model = EmailRecord
+        fields = [
+            "id",
+            "kind",
+            "subject",
+            "initiator_name",
+            "recipient_count",
+            "emails_sent",
+            "recipient_groups",
+            "is_test",
+            "created_at",
+        ]
+
+    def get_initiator_name(self, obj):
+        return get_user_display_name(obj.initiator) if obj.initiator else "Unknown"
+
+    def get_recipient_count(self, obj):
+        return len(obj.recipients or [])
+
+
+class EmailRecordDetailSerializer(EmailRecordListSerializer):
+    """Full serializer for previewing a stored email, including body content."""
+
+    class Meta(EmailRecordListSerializer.Meta):
+        fields = EmailRecordListSerializer.Meta.fields + [
+            "body",
+            "group_messages",
+            "recipients",
+        ]
+
 
 # endregion  =================================================================================================

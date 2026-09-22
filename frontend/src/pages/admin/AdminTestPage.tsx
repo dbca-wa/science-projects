@@ -36,7 +36,7 @@ import {
 	useGenerateTestPDF,
 	useGenerateAllTestPDFs,
 } from "@/features/admin/hooks/useTestPDF";
-import { AnnouncementContent } from "@/features/admin/components/shared/AnnouncementContent";
+import { AnnouncementsPanel } from "@/features/admin/components/shared/AnnouncementsPanel";
 import { BannerContent } from "@/features/admin/components/shared/BannerContent";
 
 /** All available email templates with human-readable labels */
@@ -461,7 +461,7 @@ const AdminTestPage = () => {
 				</TabsContent>
 
 				<TabsContent value="announcements">
-					<AnnouncementContent />
+					<AnnouncementsPanel />
 				</TabsContent>
 
 				<TabsContent value="documents">

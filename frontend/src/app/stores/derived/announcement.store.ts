@@ -75,6 +75,7 @@ export class AnnouncementStore extends BaseStore<AnnouncementStoreState> {
 			setGroupMessage: action,
 			setActivePreviewGroup: action,
 			setSubject: action,
+			applyTemplate: action,
 			reset: action,
 
 			anySendGroup: computed,
@@ -153,6 +154,49 @@ export class AnnouncementStore extends BaseStore<AnnouncementStoreState> {
 
 	setSubject = (subject: string) => {
 		this.state.subject = subject;
+	};
+
+	/**
+	 * Prepopulate the composer from a prior email record.
+	 *
+	 * Sets the subject and message body (single or per-group). Recipients are
+	 * intentionally left untouched — the admin must select recipient groups
+	 * afresh for the new send.
+	 */
+	applyTemplate = (
+		subject: string,
+		body: string,
+		groupMessages?: Record<string, string>
+	) => {
+		this.state.subject = subject;
+
+		const groupEntries = groupMessages
+			? (Object.entries(groupMessages) as [GroupKey, string][]).filter(
+					([, msg]) => msg && msg.trim().length > 0
+				)
+			: [];
+
+		if (groupEntries.length > 0) {
+			this.state.perGroupEnabled = true;
+			const merged: Record<GroupKey, string> = {
+				ba_leads: "",
+				project_leads: "",
+				team_members: "",
+			};
+			for (const [group, msg] of groupEntries) {
+				merged[group] = msg;
+			}
+			this.state.customMessages = merged;
+			this.state.customMessage = "";
+		} else {
+			this.state.perGroupEnabled = false;
+			this.state.customMessage = body;
+			this.state.customMessages = {
+				ba_leads: "",
+				project_leads: "",
+				team_members: "",
+			};
+		}
 	};
 
 	reset = () => {

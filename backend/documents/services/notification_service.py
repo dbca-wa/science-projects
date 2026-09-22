@@ -1115,6 +1115,7 @@ class NotificationService:
         priority_to_group = {3: "ba_leads", 2: "project_leads", 1: "team_members"}
 
         # Send deduplicated emails
+        emails_sent = 0
         for pk, (priority, name, email) in user_roles.items():
             email_subject = "SPMS: New Reporting Cycle Open"
             to_email = [email]
@@ -1144,11 +1145,44 @@ class NotificationService:
 
             template_content = render_to_string(template_path, template_props)
 
-            send_email_with_embedded_image(
-                recipient_email=to_email,
-                subject=email_subject,
-                html_content=template_content,
-            )
+            try:
+                send_email_with_embedded_image(
+                    recipient_email=to_email,
+                    subject=email_subject,
+                    html_content=template_content,
+                )
+                emails_sent += 1
+            except Exception as e:
+                settings.LOGGER.error(f"Failed to send new cycle email to {email}: {e}")
+
+        # Record this correspondence (best-effort; never blocks the send).
+        # Only the admin-authored custom message is stored — the fixed cycle
+        # template text is not, since that portion is not editable/reusable.
+        from adminoptions.models import EmailRecord
+        from adminoptions.services.email_record_service import EmailRecordService
+
+        recipients_payload = [
+            {
+                "pk": pk,
+                "name": name,
+                "email": email,
+                "group": priority_to_group.get(priority, "team_members"),
+            }
+            for pk, (priority, name, email) in user_roles.items()
+        ]
+        EmailRecordService.record(
+            kind=EmailRecord.EmailKind.NEW_CYCLE,
+            subject="SPMS: New Reporting Cycle Open",
+            initiator=actioning_user,
+            recipient_groups=recipient_groups,
+            recipients=recipients_payload,
+            emails_sent=emails_sent,
+            body=sanitised_message or "",
+            group_messages=sanitised_messages or {},
+            is_test=EmailRecordService.is_email_testing_active(),
+        )
+
+        return {"emails_sent": emails_sent}
 
     @staticmethod
     def send_announcement_emails(
@@ -1351,6 +1385,32 @@ class NotificationService:
         settings.LOGGER.info(
             f"Announcement emails sent: {emails_sent}/{len(user_roles)}"
         )
+
+        # Record this correspondence (best-effort; never blocks the send).
+        from adminoptions.models import EmailRecord
+        from adminoptions.services.email_record_service import EmailRecordService
+
+        recipients_payload = [
+            {
+                "pk": pk,
+                "name": name,
+                "email": email,
+                "group": priority_to_group.get(priority, "team_members"),
+            }
+            for pk, (priority, name, email) in user_roles.items()
+        ]
+        EmailRecordService.record(
+            kind=EmailRecord.EmailKind.ANNOUNCEMENT,
+            subject=subject,
+            initiator=actioning_user,
+            recipient_groups=recipient_groups,
+            recipients=recipients_payload,
+            emails_sent=emails_sent,
+            body=sanitised_message or "",
+            group_messages=sanitised_messages or {},
+            is_test=EmailRecordService.is_email_testing_active(),
+        )
+
         return {"emails_sent": emails_sent, "errors": errors}
 
     @staticmethod

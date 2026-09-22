@@ -21,7 +21,13 @@ from rest_framework.status import (
 )
 from rest_framework.views import APIView
 
-from adminoptions.models import AdminOptions, AdminTask, ContentField, GuideSection
+from adminoptions.models import (
+    AdminOptions,
+    AdminTask,
+    ContentField,
+    EmailRecord,
+    GuideSection,
+)
 from adminoptions.serializers import (
     AdminOptionsCreateSerializer,
     AdminOptionsMaintainerSerializer,
@@ -29,10 +35,13 @@ from adminoptions.serializers import (
     AdminTaskRequestCreationSerializer,
     AdminTaskSerializer,
     ContentFieldSerializer,
+    EmailRecordDetailSerializer,
+    EmailRecordListSerializer,
     GuideSectionCreateUpdateSerializer,
     GuideSectionSerializer,
 )
 from adminoptions.services import AdminTaskService
+from adminoptions.services.email_record_service import EmailRecordService
 from caretakers.models import Caretaker
 from projects.models import Project
 from users.models import User
@@ -1601,6 +1610,90 @@ class AnnouncementEmailPreview(APIView):
             )
 
         return Response({"html": html}, status=HTTP_200_OK)
+
+
+class EmailRecordList(APIView):
+    """List stored announcement and new-cycle email records (paginated)."""
+
+    permission_classes = [IsAdminUser]
+
+    DEFAULT_PAGE_SIZE = 10
+
+    def get(self, request):
+        qs = EmailRecordService.list_records()
+
+        kind = request.query_params.get("kind")
+        if kind in {
+            EmailRecord.EmailKind.ANNOUNCEMENT,
+            EmailRecord.EmailKind.NEW_CYCLE,
+        }:
+            qs = qs.filter(kind=kind)
+
+        # is_test filter:
+        #   omitted        -> official only (exclude test sends) by default
+        #   "true"/"1"     -> test sends only
+        #   "all"          -> both test and official
+        is_test_param = (request.query_params.get("is_test") or "").lower()
+        if is_test_param in {"true", "1"}:
+            qs = qs.filter(is_test=True)
+        elif is_test_param == "all":
+            pass
+        else:
+            qs = qs.filter(is_test=False)
+
+        try:
+            page = int(request.query_params.get("page", 1))
+        except (TypeError, ValueError):
+            page = 1
+        if page < 1:
+            page = 1
+
+        try:
+            page_size = int(
+                request.query_params.get("page_size", self.DEFAULT_PAGE_SIZE)
+            )
+        except (TypeError, ValueError):
+            page_size = self.DEFAULT_PAGE_SIZE
+        if page_size < 1:
+            page_size = self.DEFAULT_PAGE_SIZE
+
+        total_results = qs.count()
+        total_pages = (
+            (total_results + page_size - 1) // page_size if total_results else 0
+        )
+
+        start = (page - 1) * page_size
+        end = start + page_size
+        records = qs[start:end]
+
+        return Response(
+            {
+                "results": EmailRecordListSerializer(records, many=True).data,
+                "total_results": total_results,
+                "total_pages": total_pages,
+                "current_page": page,
+            },
+            status=HTTP_200_OK,
+        )
+
+
+class EmailRecordDetail(APIView):
+    """Retrieve the full stored content of a single email record."""
+
+    permission_classes = [IsAdminUser]
+
+    def get(self, request, pk):
+        try:
+            record = EmailRecordService.get_record(pk)
+        except EmailRecord.DoesNotExist:
+            return Response(
+                {"error": "Email record not found."},
+                status=HTTP_404_NOT_FOUND,
+            )
+        return Response(
+            EmailRecordDetailSerializer(record).data,
+            status=HTTP_200_OK,
+        )
 
 
 class RespondToCaretakerRequest(APIView):

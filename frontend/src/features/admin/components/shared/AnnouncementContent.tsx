@@ -36,8 +36,19 @@ const GREEN_CHECKBOX =
  * Announcement tab content for the Admin Test Page.
  * Allows admins to send announcement emails to selected recipient groups.
  */
-export const AnnouncementContent = observer(function AnnouncementContent() {
-	const [store] = useState(() => new AnnouncementStore());
+interface AnnouncementContentProps {
+	/**
+	 * Optional shared store. When omitted, the component creates its own —
+	 * preserving backward-compatible standalone usage.
+	 */
+	store?: AnnouncementStore;
+}
+
+export const AnnouncementContent = observer(function AnnouncementContent({
+	store: externalStore,
+}: AnnouncementContentProps = {}) {
+	const [internalStore] = useState(() => new AnnouncementStore());
+	const store = externalStore ?? internalStore;
 	const { mutate: sendAnnouncement, isPending } = useSendAnnouncement();
 
 	// Debounced custom message for email preview
