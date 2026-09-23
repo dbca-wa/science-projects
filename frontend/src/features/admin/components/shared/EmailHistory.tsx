@@ -60,8 +60,9 @@ interface EmailHistoryProps {
 export const EmailHistory = ({ onUseAsTemplate }: EmailHistoryProps) => {
 	const [page, setPage] = useState(1);
 	const [kindFilter, setKindFilter] = useState<EmailRecordKind | "all">("all");
-	const [testFilter, setTestFilter] =
-		useState<EmailRecordTestFilter>("official");
+	// Default to "all" so test sends are visible immediately after sending —
+	// they carry a distinct "Test" badge, so they don't clutter the log.
+	const [testFilter, setTestFilter] = useState<EmailRecordTestFilter>("all");
 	const [previewId, setPreviewId] = useState<number | null>(null);
 
 	const { data, isLoading, isError } = useEmailRecords(

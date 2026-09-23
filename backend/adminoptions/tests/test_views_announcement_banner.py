@@ -334,6 +334,7 @@ class TestSendAnnouncementExecution:
             custom_messages=None,
             subject="SPMS: Test Announcement",
             division_slug=None,
+            test_recipient_pk=None,
         )
 
     @pytest.mark.integration
@@ -410,6 +411,31 @@ class TestSendAnnouncementExecution:
         assert response.status_code == status.HTTP_200_OK
         call_kwargs = mock_send.call_args[1]
         assert call_kwargs["division_slug"] == "bcs"
+
+    @pytest.mark.integration
+    @patch(
+        "documents.services.notification_service.NotificationService.send_announcement_emails"
+    )
+    def test_send_with_test_recipient(self, mock_send, superuser, admin_options):
+        """Should pass test_recipient_pk to the service for a test send."""
+        mock_send.return_value = {"emails_sent": 1, "errors": []}
+
+        client = APIClient()
+        client.force_authenticate(user=superuser)
+        response = client.post(
+            SEND_ANNOUNCEMENT_URL,
+            {
+                "recipient_groups": ["ba_leads"],
+                "custom_message": "<p>Hello</p>",
+                "test_recipient_pk": superuser.pk,
+            },
+            format="json",
+        )
+
+        assert response.status_code == status.HTTP_200_OK
+        assert response.data["emails_sent"] == 1
+        call_kwargs = mock_send.call_args[1]
+        assert call_kwargs["test_recipient_pk"] == superuser.pk
 
     @pytest.mark.integration
     @patch(

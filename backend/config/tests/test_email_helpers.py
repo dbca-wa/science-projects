@@ -113,6 +113,38 @@ class TestSendEmailWithEmbeddedImage:
 
     @patch("smtplib.SMTP")
     @patch("os.path.exists", return_value=False)
+    @patch("django.core.cache.cache.get", return_value=None)
+    @patch("django.core.cache.cache.set")
+    @pytest.mark.integration
+    def test_test_mode_does_not_double_prefix_subject(
+        self,
+        mock_cache_set,
+        mock_cache_get,
+        mock_exists,
+        mock_smtp_cls,
+        mock_admin_opts_test_mode,
+    ):
+        """An already-[TEST]-prefixed subject is not prefixed a second time."""
+        from config.helpers import send_email_with_embedded_image
+
+        mock_smtp_instance = MagicMock()
+        mock_smtp_cls.return_value.__enter__ = MagicMock(
+            return_value=mock_smtp_instance
+        )
+        mock_smtp_cls.return_value.__exit__ = MagicMock(return_value=False)
+
+        send_email_with_embedded_image(
+            recipient_email=["original@dbca.wa.gov.au"],
+            subject="[TEST] Already Prefixed",
+            html_content="<p>Hello</p>",
+        )
+
+        sent_msg = mock_smtp_instance.send_message.call_args[0][0]
+        assert sent_msg["Subject"] == "[TEST] Already Prefixed"
+        assert not sent_msg["Subject"].startswith("[TEST] [TEST]")
+
+    @patch("smtplib.SMTP")
+    @patch("os.path.exists", return_value=False)
     @patch("django.core.cache.cache.get", return_value=True)
     @pytest.mark.integration
     def test_test_mode_deduplication_skips_duplicate(
