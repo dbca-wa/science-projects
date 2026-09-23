@@ -494,6 +494,31 @@ class TestAnnouncementTestSend:
         assert call_kwargs["subject"] == "[TEST] SPMS: Big News"
 
     @patch(PATCH_SEND_EMAIL)
+    def test_does_not_double_prefix_subject(
+        self, mock_send, actioning_user, business_area
+    ):
+        """A subject already starting with [TEST] is not prefixed again."""
+        from adminoptions.models import EmailRecord
+
+        NotificationService.send_announcement_emails(
+            actioning_user=actioning_user,
+            recipient_groups=["ba_leads"],
+            custom_message="<p>Test body</p>",
+            subject="[TEST] SPMS: Announcement",
+            test_recipient_pk=actioning_user.pk,
+        )
+
+        # Delivered subject is single-prefixed.
+        assert mock_send.call_args[1]["subject"] == "[TEST] SPMS: Announcement"
+
+        # Recorded subject is single-prefixed too.
+        record = EmailRecord.objects.filter(
+            kind=EmailRecord.EmailKind.ANNOUNCEMENT
+        ).latest("id")
+        assert record.subject == "[TEST] SPMS: Announcement"
+        assert not record.subject.startswith("[TEST] [TEST]")
+
+    @patch(PATCH_SEND_EMAIL)
     def test_records_as_test_send(self, mock_send, actioning_user, business_area):
         """A test send is recorded and flagged as a test in the history."""
         from adminoptions.models import EmailRecord

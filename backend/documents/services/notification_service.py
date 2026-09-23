@@ -1296,7 +1296,10 @@ class NotificationService:
                     (v for v in sanitised_messages.values() if v), None
                 )
 
-        test_subject = f"[TEST] {subject}"
+        # Prefix with [TEST], but only once — the composer subject may already
+        # carry a [TEST] prefix (e.g. reused from a prior test via "Use as
+        # template"), which would otherwise produce "[TEST] [TEST] ...".
+        test_subject = subject if subject.startswith("[TEST]") else f"[TEST] {subject}"
 
         template_props = {
             "subject": test_subject,
