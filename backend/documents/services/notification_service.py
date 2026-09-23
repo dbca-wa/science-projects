@@ -1184,6 +1184,169 @@ class NotificationService:
 
         return {"emails_sent": emails_sent}
 
+    # Tags/attributes permitted in announcement email bodies. Shared by the
+    # normal send path and the test-send path so both sanitise identically.
+    _ANNOUNCEMENT_ALLOWED_TAGS = [
+        "p",
+        "br",
+        "strong",
+        "em",
+        "u",
+        "s",
+        "a",
+        "ul",
+        "ol",
+        "li",
+        "h1",
+        "h2",
+        "h3",
+        "h4",
+        "h5",
+        "h6",
+        "blockquote",
+        "span",
+    ]
+    _ANNOUNCEMENT_ALLOWED_ATTRS = {"a": ["href", "target"], "span": ["style"]}
+
+    @staticmethod
+    def _sanitise_announcement_body(custom_message="", custom_messages=None):
+        """
+        Sanitise announcement message HTML.
+
+        Returns a (sanitised_message, sanitised_messages) tuple where exactly
+        one is populated: per-group messages take precedence over the single
+        message, mirroring the resolution used elsewhere in the announcement
+        flow.
+        """
+        import bleach
+
+        allowed_tags = NotificationService._ANNOUNCEMENT_ALLOWED_TAGS
+        allowed_attrs = NotificationService._ANNOUNCEMENT_ALLOWED_ATTRS
+
+        sanitised_message = None
+        sanitised_messages = None
+
+        if custom_messages and isinstance(custom_messages, dict):
+            sanitised_messages = {}
+            for key in ("ba_leads", "project_leads", "team_members"):
+                raw = custom_messages.get(key, "")
+                if raw:
+                    sanitised_messages[key] = bleach.clean(
+                        raw, tags=allowed_tags, attributes=allowed_attrs, strip=True
+                    )
+        elif custom_message:
+            sanitised_message = bleach.clean(
+                custom_message, tags=allowed_tags, attributes=allowed_attrs, strip=True
+            )
+
+        return sanitised_message, sanitised_messages
+
+    @staticmethod
+    def _send_announcement_test_email(
+        actioning_user,
+        recipient_groups,
+        test_recipient_pk,
+        custom_message="",
+        custom_messages=None,
+        subject="SPMS: Announcement",
+    ):
+        """
+        Send a single announcement test email to one user.
+
+        Bypasses all recipient-group resolution: exactly one email is sent to
+        the user identified by test_recipient_pk. The subject is prefixed with
+        "[TEST]" and the correspondence is recorded as a test send so it is
+        clearly distinguished from real announcements in the email history.
+
+        When a per-group message is configured, the message for the first
+        selected group is used for the preview body (the test recipient only
+        receives one email, so a single body is chosen).
+        """
+        from adminoptions.models import EmailRecord
+        from adminoptions.services.email_record_service import EmailRecordService
+
+        settings.LOGGER.info("Sending announcement test email")
+        template_path = "./email_templates/announcement_email.html"
+
+        test_user = User.objects.filter(pk=test_recipient_pk).first()
+        if not test_user or not test_user.email:
+            settings.LOGGER.error(
+                f"Announcement test email: user {test_recipient_pk} not found "
+                "or has no email"
+            )
+            return {"emails_sent": 0, "errors": ["Test recipient not found."]}
+
+        sanitised_message, sanitised_messages = (
+            NotificationService._sanitise_announcement_body(
+                custom_message=custom_message, custom_messages=custom_messages
+            )
+        )
+
+        # Choose a single body for the one test email. Prefer the per-group
+        # message of the first selected group, else the single message.
+        recipient_custom_message = sanitised_message
+        if sanitised_messages:
+            for key in ("ba_leads", "project_leads", "team_members"):
+                if key in recipient_groups and sanitised_messages.get(key):
+                    recipient_custom_message = sanitised_messages[key]
+                    break
+            if recipient_custom_message is None:
+                # Fall back to any available per-group message.
+                recipient_custom_message = next(
+                    (v for v in sanitised_messages.values() if v), None
+                )
+
+        test_subject = f"[TEST] {subject}"
+
+        template_props = {
+            "subject": test_subject,
+            "actioning_user_email": actioning_user.email,
+            "actioning_user_name": get_user_display_name(actioning_user),
+            "recipient_name": get_user_display_name(test_user),
+            "site_url": settings.SITE_URL,
+            "custom_message": recipient_custom_message,
+        }
+
+        emails_sent = 0
+        errors = []
+        try:
+            template_content = render_to_string(template_path, template_props)
+            send_email_with_embedded_image(
+                recipient_email=[test_user.email],
+                subject=test_subject,
+                html_content=template_content,
+            )
+            emails_sent = 1
+        except Exception as e:
+            settings.LOGGER.error(
+                f"Failed to send announcement test email to {test_user.email}: {e}"
+            )
+            errors.append(f"Failed to send to {test_user.email}")
+
+        settings.LOGGER.info(f"Announcement test email sent: {emails_sent}/1")
+
+        # Record as a test send so it is distinguishable in the history.
+        EmailRecordService.record(
+            kind=EmailRecord.EmailKind.ANNOUNCEMENT,
+            subject=test_subject,
+            initiator=actioning_user,
+            recipient_groups=recipient_groups,
+            recipients=[
+                {
+                    "pk": test_user.pk,
+                    "name": get_user_display_name(test_user),
+                    "email": test_user.email,
+                    "group": "test",
+                }
+            ],
+            emails_sent=emails_sent,
+            body=sanitised_message or "",
+            group_messages=sanitised_messages or {},
+            is_test=True,
+        )
+
+        return {"emails_sent": emails_sent, "errors": errors}
+
     @staticmethod
     def send_announcement_emails(
         actioning_user,
@@ -1194,6 +1357,7 @@ class NotificationService:
         custom_messages=None,
         subject="SPMS: Announcement",
         division_slug=None,
+        test_recipient_pk=None,
     ):
         """
         Send announcement emails to selected recipient groups.
@@ -1211,7 +1375,24 @@ class NotificationService:
             custom_messages: Dict with per-group messages (takes precedence over custom_message).
             subject: Email subject line.
             division_slug: Optional division slug to scope recipients.
+            test_recipient_pk: Optional user PK. When provided, a single test email
+                is sent to that one user only, bypassing all group resolution. The
+                subject is prefixed with "[TEST]" and the send is recorded as a test.
+                Used by the "Send test to me" flow so an admin can verify an
+                announcement without emailing real recipients.
         """
+        # Test-send short-circuit: deliver exactly one email to the chosen user,
+        # ignoring the selected recipient groups entirely.
+        if test_recipient_pk is not None:
+            return NotificationService._send_announcement_test_email(
+                actioning_user=actioning_user,
+                recipient_groups=recipient_groups,
+                test_recipient_pk=test_recipient_pk,
+                custom_message=custom_message,
+                custom_messages=custom_messages,
+                subject=subject,
+            )
+
         from agencies.models import BusinessArea, Division
         from projects.models import ProjectMember
 
@@ -1306,45 +1487,11 @@ class NotificationService:
                 user_roles.pop(pk, None)
 
         # Sanitise custom message(s)
-        import bleach
-
-        allowed_tags = [
-            "p",
-            "br",
-            "strong",
-            "em",
-            "u",
-            "s",
-            "a",
-            "ul",
-            "ol",
-            "li",
-            "h1",
-            "h2",
-            "h3",
-            "h4",
-            "h5",
-            "h6",
-            "blockquote",
-            "span",
-        ]
-        allowed_attrs = {"a": ["href", "target"], "span": ["style"]}
-
-        sanitised_message = None
-        sanitised_messages = None
-
-        if custom_messages and isinstance(custom_messages, dict):
-            sanitised_messages = {}
-            for key in ("ba_leads", "project_leads", "team_members"):
-                raw = custom_messages.get(key, "")
-                if raw:
-                    sanitised_messages[key] = bleach.clean(
-                        raw, tags=allowed_tags, attributes=allowed_attrs, strip=True
-                    )
-        elif custom_message:
-            sanitised_message = bleach.clean(
-                custom_message, tags=allowed_tags, attributes=allowed_attrs, strip=True
+        sanitised_message, sanitised_messages = (
+            NotificationService._sanitise_announcement_body(
+                custom_message=custom_message, custom_messages=custom_messages
             )
+        )
 
         # Map role priority to group key for per-group message lookup
         priority_to_group = {3: "ba_leads", 2: "project_leads", 1: "team_members"}

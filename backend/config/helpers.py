@@ -126,7 +126,10 @@ def send_email_with_embedded_image(
                 return
             cache.set(dedup_key, True, timeout=30)  # 30-second dedup window
 
-            subject = f"[TEST] {subject}"
+            # Prefix with [TEST], but only once — some callers (e.g. the
+            # announcement test-send flow) already prefix the subject.
+            if not subject.startswith("[TEST]"):
+                subject = f"[TEST] {subject}"
             # Add test mode banner to the HTML content
             original_str = (
                 ", ".join(original_recipients)

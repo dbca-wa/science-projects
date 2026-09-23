@@ -430,3 +430,119 @@ class TestAnnouncementInvalidRecipients:
 
         assert result["emails_sent"] == 0
         mock_send.assert_not_called()
+
+
+@pytest.mark.django_db
+class TestAnnouncementTestSend:
+    """Tests for the single-recipient test-send path (test_recipient_pk)."""
+
+    @patch(PATCH_SEND_EMAIL)
+    def test_sends_single_email_to_test_recipient(
+        self,
+        mock_send,
+        actioning_user,
+        business_area,
+        project_with_members,
+        ba_lead,
+        project_lead,
+        team_member,
+    ):
+        """Only the test recipient is emailed, even with all groups selected."""
+        result = NotificationService.send_announcement_emails(
+            actioning_user=actioning_user,
+            recipient_groups=["ba_leads", "project_leads", "team_members"],
+            custom_message="<p>Test body</p>",
+            test_recipient_pk=actioning_user.pk,
+        )
+
+        assert result["emails_sent"] == 1
+        mock_send.assert_called_once()
+        call_kwargs = mock_send.call_args[1]
+        assert call_kwargs["recipient_email"] == [actioning_user.email]
+
+    @patch(PATCH_SEND_EMAIL)
+    def test_bypasses_group_resolution(
+        self, mock_send, actioning_user, business_area, ba_lead
+    ):
+        """The test recipient need not belong to any selected group."""
+        result = NotificationService.send_announcement_emails(
+            actioning_user=actioning_user,
+            recipient_groups=["ba_leads"],
+            custom_message="<p>Test body</p>",
+            test_recipient_pk=actioning_user.pk,
+        )
+
+        assert result["emails_sent"] == 1
+        call_kwargs = mock_send.call_args[1]
+        # actioning_user is not the BA lead, yet still receives the test email.
+        assert call_kwargs["recipient_email"] == [actioning_user.email]
+
+    @patch(PATCH_SEND_EMAIL)
+    def test_subject_is_prefixed_with_test(
+        self, mock_send, actioning_user, business_area
+    ):
+        """The test email subject is prefixed with [TEST]."""
+        NotificationService.send_announcement_emails(
+            actioning_user=actioning_user,
+            recipient_groups=["ba_leads"],
+            custom_message="<p>Test body</p>",
+            subject="SPMS: Big News",
+            test_recipient_pk=actioning_user.pk,
+        )
+
+        call_kwargs = mock_send.call_args[1]
+        assert call_kwargs["subject"] == "[TEST] SPMS: Big News"
+
+    @patch(PATCH_SEND_EMAIL)
+    def test_records_as_test_send(self, mock_send, actioning_user, business_area):
+        """A test send is recorded and flagged as a test in the history."""
+        from adminoptions.models import EmailRecord
+
+        NotificationService.send_announcement_emails(
+            actioning_user=actioning_user,
+            recipient_groups=["ba_leads"],
+            custom_message="<p>Test body</p>",
+            test_recipient_pk=actioning_user.pk,
+        )
+
+        record = EmailRecord.objects.filter(
+            kind=EmailRecord.EmailKind.ANNOUNCEMENT
+        ).latest("id")
+        assert record.is_test is True
+        assert record.emails_sent == 1
+        assert record.recipients[0]["email"] == actioning_user.email
+
+    @patch(PATCH_SEND_EMAIL)
+    def test_missing_recipient_returns_error(
+        self, mock_send, actioning_user, business_area
+    ):
+        """A non-existent test recipient sends nothing and reports an error."""
+        result = NotificationService.send_announcement_emails(
+            actioning_user=actioning_user,
+            recipient_groups=["ba_leads"],
+            custom_message="<p>Test body</p>",
+            test_recipient_pk=999999,
+        )
+
+        assert result["emails_sent"] == 0
+        assert result["errors"]
+        mock_send.assert_not_called()
+
+    @patch(PATCH_SEND_EMAIL)
+    def test_uses_selected_group_message_for_per_group(
+        self, mock_send, actioning_user, business_area
+    ):
+        """With per-group messages, the first selected group's message is used."""
+        NotificationService.send_announcement_emails(
+            actioning_user=actioning_user,
+            recipient_groups=["project_leads", "team_members"],
+            custom_messages={
+                "ba_leads": "<p>BA message</p>",
+                "project_leads": "<p>PL message</p>",
+                "team_members": "<p>TM message</p>",
+            },
+            test_recipient_pk=actioning_user.pk,
+        )
+
+        html = mock_send.call_args[1]["html_content"]
+        assert "PL message" in html

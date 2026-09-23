@@ -1515,6 +1515,7 @@ class SendAnnouncement(APIView):
         division = request.data.get("division")
         excluded_user_ids = request.data.get("excluded_user_ids", [])
         recipient_user_pks = request.data.get("recipient_user_pks")
+        test_recipient_pk = request.data.get("test_recipient_pk")
 
         if not recipient_groups:
             return Response(
@@ -1545,6 +1546,7 @@ class SendAnnouncement(APIView):
                 custom_messages=custom_messages,
                 subject=subject,
                 division_slug=division,
+                test_recipient_pk=test_recipient_pk,
             )
         except Exception as e:
             settings.LOGGER.error(
@@ -1555,9 +1557,15 @@ class SendAnnouncement(APIView):
                 status=HTTP_500_INTERNAL_SERVER_ERROR,
             )
 
-        settings.LOGGER.info(
-            f"{request.user} sent announcement to {result['emails_sent']} recipients"
-        )
+        if test_recipient_pk is not None:
+            settings.LOGGER.info(
+                f"{request.user} sent a test announcement "
+                f"({result['emails_sent']} email)"
+            )
+        else:
+            settings.LOGGER.info(
+                f"{request.user} sent announcement to {result['emails_sent']} recipients"
+            )
         return Response(result, status=HTTP_200_OK)
 
 

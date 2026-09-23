@@ -12,11 +12,17 @@ import { EmailPreview } from "./EmailPreview";
 import { SuccessAnimation } from "@/shared/components/SuccessAnimation";
 import { AnnouncementStore } from "@/app/stores/derived/announcement.store";
 import { useNewCyclePreview } from "@/shared/hooks/queries/useBumpEmails";
+import { useCurrentUser } from "@/features/auth";
+import { UserSearchDropdown } from "@/shared/components/user";
 import {
 	useSendAnnouncement,
+	useSendTestAnnouncement,
 	useAnnouncementEmailPreview,
 } from "@/features/admin/hooks/useAnnouncement";
-import type { SendAnnouncementPayload } from "@/features/admin/hooks/useAnnouncement";
+import type {
+	SendAnnouncementPayload,
+	SendTestAnnouncementPayload,
+} from "@/features/admin/hooks/useAnnouncement";
 import {
 	AlertDialog,
 	AlertDialogAction,
@@ -50,6 +56,14 @@ export const AnnouncementContent = observer(function AnnouncementContent({
 	const [internalStore] = useState(() => new AnnouncementStore());
 	const store = externalStore ?? internalStore;
 	const { mutate: sendAnnouncement, isPending } = useSendAnnouncement();
+	const { mutate: sendTestAnnouncement, isPending: isSendingTest } =
+		useSendTestAnnouncement();
+	const { data: currentUser } = useCurrentUser();
+
+	// Who receives the single test email. Defaults to the current user; an admin
+	// may pick a different recipient. Null means "fall back to current user".
+	const [testRecipientId, setTestRecipientId] = useState<number | null>(null);
+	const effectiveTestRecipientId = testRecipientId ?? currentUser?.id ?? null;
 
 	// Debounced custom message for email preview
 	const [debouncedMessage, setDebouncedMessage] = useState("");
@@ -187,6 +201,49 @@ export const AnnouncementContent = observer(function AnnouncementContent({
 		setConfirmOpen(false);
 		store.reset();
 	};
+
+	// Build the message portion of the test payload, mirroring handleSend so the
+	// test email content matches a real send.
+	const buildTestMessagePayload = (): Pick<
+		SendTestAnnouncementPayload,
+		"custom_message" | "custom_messages"
+	> => {
+		if (store.state.perGroupEnabled) {
+			const msgs: Record<string, string> = {};
+			for (const g of ["ba_leads", "project_leads", "team_members"] as const) {
+				if (store.state.groupCustomEnabled[g]) {
+					msgs[g] = store.state.customMessages[g];
+				}
+			}
+			if (Object.keys(msgs).length > 0) {
+				return { custom_messages: msgs };
+			}
+		}
+		return { custom_message: store.state.customMessage };
+	};
+
+	const handleSendTest = () => {
+		if (!effectiveTestRecipientId) {
+			toast.error("No test recipient available.");
+			return;
+		}
+		const payload: SendTestAnnouncementPayload = {
+			recipient_groups: store.selectedGroups,
+			subject: store.state.subject,
+			test_recipient_pk: effectiveTestRecipientId,
+			...buildTestMessagePayload(),
+		};
+		sendTestAnnouncement(payload, {
+			onSuccess: () => {
+				toast.success("Test email sent — check your inbox.");
+			},
+		});
+	};
+
+	const isSelf =
+		testRecipientId === null || testRecipientId === currentUser?.id;
+	const canSendTest =
+		store.isCustomMessageValid && effectiveTestRecipientId !== null;
 
 	return (
 		<div className="space-y-6">
@@ -347,6 +404,52 @@ export const AnnouncementContent = observer(function AnnouncementContent({
 						customMessage={debouncedMessage}
 						defaultText="Please log in to SPMS for more information."
 					/>
+				</div>
+			)}
+
+			{/* Send a test email — one email to a single user, bypassing groups */}
+			{store.anySendGroup && (
+				<div className="rounded-lg border border-amber-300 bg-amber-50 p-6 shadow-sm dark:border-amber-800/60 dark:bg-amber-950/30">
+					<h3 className="text-base font-semibold">Send a test first</h3>
+					<p className="mt-1 text-sm text-muted-foreground">
+						Delivers a single email (subject prefixed with{" "}
+						<span className="font-mono">[TEST]</span>) to one person so you can
+						verify it before the real send. No real recipients are emailed.
+					</p>
+					<div className="mt-4 max-w-md">
+						<UserSearchDropdown
+							label="Test recipient"
+							placeholder={
+								currentUser
+									? `Default: you (${currentUser.email})`
+									: "Search for a user..."
+							}
+							helperText="Leave empty to send the test to yourself."
+							isRequired={false}
+							onlyInternal={true}
+							setUserFunction={setTestRecipientId}
+							preselectedUserPk={testRecipientId ?? undefined}
+						/>
+					</div>
+					<div className="mt-4 flex items-center justify-between gap-4">
+						<p className="text-xs text-muted-foreground">
+							{isSelf
+								? "The test email will be sent to you."
+								: "The test email will be sent to the selected user."}
+						</p>
+						<Button
+							type="button"
+							variant="outline"
+							onClick={handleSendTest}
+							disabled={!canSendTest || isSendingTest}
+							className="border-amber-400 text-amber-800 hover:bg-amber-100 dark:border-amber-700 dark:text-amber-200 dark:hover:bg-amber-900/40"
+						>
+							{isSendingTest && (
+								<Loader2 className="mr-2 size-4 animate-spin" />
+							)}
+							{isSelf ? "Send test to me" : "Send test email"}
+						</Button>
+					</div>
 				</div>
 			)}
 

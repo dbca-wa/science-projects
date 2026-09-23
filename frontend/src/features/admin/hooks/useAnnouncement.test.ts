@@ -83,4 +83,21 @@ describe("Announcement email API payload", () => {
 		const sentPayload = (apiClient.post as Mock).mock.calls[0][1];
 		expect(sentPayload.recipient_user_pks).toEqual([100, 200, 300]);
 	});
+
+	it("sends test_recipient_pk for a single test email", async () => {
+		(apiClient.post as Mock).mockResolvedValue({ emails_sent: 1, errors: [] });
+
+		const payload = {
+			recipient_groups: ["ba_leads", "project_leads"],
+			subject: "SPMS: Announcement",
+			custom_message: "<p>Test body</p>",
+			test_recipient_pk: 42,
+		};
+
+		await apiClient.post("adminoptions/send-announcement", payload);
+
+		const sentPayload = (apiClient.post as Mock).mock.calls[0][1];
+		expect(sentPayload.test_recipient_pk).toBe(42);
+		expect(sentPayload.recipient_groups).toEqual(["ba_leads", "project_leads"]);
+	});
 });
