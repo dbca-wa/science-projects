@@ -45,12 +45,19 @@ jobs:
 
   # ====================== BUILD FRONTEND PRODUCTION ======================
   build-frontend-prod:
-    name: Build Frontend (Production)
-    runs-on: ubuntu-latest
+    name: Build Frontend (${{ matrix.arch }})
     needs: [run-tests, detect-changes]
     if: |
       success() &&
       needs.detect-changes.outputs.frontend == 'true'
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout code
@@ -77,36 +84,84 @@ jobs:
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "Extracted version: ${VERSION}"
 
-      - name: Build and push Frontend Production image
+      - name: Build and push Frontend image (per-arch)
         uses: docker/build-push-action@v6
         with:
           context: ./frontend
           file: ./frontend/Dockerfile
+          platforms: linux/${{ matrix.arch }}
           push: true
           provenance: false
           sbom: false
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:${{ steps.version.outputs.VERSION }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:stable
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:${{ steps.version.outputs.VERSION }}-${{ matrix.arch }}
           build-args: |
             VITE_VERSION=${{ steps.version.outputs.VERSION }}
             VITE_SENTRY_DSN=https://8dd0517876955893e7c6c13dda43ae8b@o4506736817405952.ingest.us.sentry.io/4507297807663104
-          cache-from: type=gha,scope=frontend-prod
-          cache-to: type=gha,mode=min,scope=frontend-prod
+          cache-from: type=gha,scope=frontend-prod-${{ matrix.arch }}
+          cache-to: type=gha,mode=min,scope=frontend-prod-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.title=Science Projects Frontend
             org.opencontainers.image.version=${{ steps.version.outputs.VERSION }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
 
+  # ====================== MERGE FRONTEND MANIFEST ======================
+  merge-frontend-prod:
+    name: Merge Frontend Manifest
+    runs-on: ubuntu-latest
+    needs: [build-frontend-prod, detect-changes]
+    if: |
+      success() &&
+      needs.detect-changes.outputs.frontend == 'true'
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log into registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create and push multi-arch manifest
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend
+
+          docker buildx imagetools create \
+            -t ${IMAGE}:${VERSION} \
+            -t ${IMAGE}:stable \
+            ${IMAGE}:${VERSION}-amd64 \
+            ${IMAGE}:${VERSION}-arm64
+
   # ====================== BUILD BACKEND PRODUCTION ======================
   build-backend-prod:
-    name: Build Backend (Production)
-    runs-on: ubuntu-latest
+    name: Build Backend (${{ matrix.arch }})
     needs: [run-tests, detect-changes]
     if: |
       success() &&
       needs.detect-changes.outputs.backend == 'true'
+    strategy:
+      matrix:
+        include:
+          - arch: amd64
+            runner: ubuntu-latest
+          - arch: arm64
+            runner: ubuntu-24.04-arm
+    runs-on: ${{ matrix.runner }}
 
     steps:
       - name: Checkout code
@@ -135,23 +190,64 @@ jobs:
           echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
           echo "Extracted version: ${VERSION}"
 
-      - name: Build and push Backend Production image
+      - name: Build and push Backend image (per-arch)
         uses: docker/build-push-action@v6
         with:
           context: ./backend
+          platforms: linux/${{ matrix.arch }}
           push: true
           provenance: false
           sbom: false
           tags: |
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:${{ steps.version.outputs.VERSION }}
-            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:stable
-          cache-from: type=gha,scope=backend-prod
-          cache-to: type=gha,mode=max,scope=backend-prod
+            ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:${{ steps.version.outputs.VERSION }}-${{ matrix.arch }}
+          cache-from: type=gha,scope=backend-prod-${{ matrix.arch }}
+          cache-to: type=gha,mode=max,scope=backend-prod-${{ matrix.arch }}
           labels: |
             org.opencontainers.image.title=Science Projects Backend (Production)
             org.opencontainers.image.version=${{ steps.version.outputs.VERSION }}
             org.opencontainers.image.source=${{ github.server_url }}/${{ github.repository }}
             org.opencontainers.image.revision=${{ github.sha }}
+
+  # ====================== MERGE BACKEND MANIFEST ======================
+  merge-backend-prod:
+    name: Merge Backend Manifest
+    runs-on: ubuntu-latest
+    needs: [build-backend-prod, detect-changes]
+    if: |
+      success() &&
+      needs.detect-changes.outputs.backend == 'true'
+
+    steps:
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v3
+
+      - name: Log into registry
+        uses: docker/login-action@v3
+        with:
+          registry: ${{ env.REGISTRY }}
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Extract version
+        id: version
+        run: |
+          if [ "${{ github.event_name }}" == "release" ]; then
+            VERSION="${{ github.event.release.tag_name }}"
+          else
+            VERSION="${GITHUB_REF#refs/tags/}"
+          fi
+          echo "VERSION=${VERSION}" >> $GITHUB_OUTPUT
+
+      - name: Create and push multi-arch manifest
+        run: |
+          VERSION=${{ steps.version.outputs.VERSION }}
+          IMAGE=${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend
+
+          docker buildx imagetools create \
+            -t ${IMAGE}:${VERSION} \
+            -t ${IMAGE}:stable \
+            ${IMAGE}:${VERSION}-amd64 \
+            ${IMAGE}:${VERSION}-arm64
 
   # ====================== UPDATE COVERAGE BADGES ======================
   update-coverage-badges:
@@ -180,26 +276,18 @@ jobs:
       - name: Update frontend badge in README
         run: |
           if [ -f "coverage-percentages/frontend-coverage-percentage/coverage-percentage.txt" ]; then
-            # Read and validate coverage value
             COVERAGE_RAW=$(cat coverage-percentages/frontend-coverage-percentage/coverage-percentage.txt)
-            
-            # Validate it's a number
             if ! [[ "$COVERAGE_RAW" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
               echo "⚠️  Warning: Invalid frontend coverage format: $COVERAGE_RAW"
               echo "Skipping frontend badge update"
             else
-              # Extract integer part
               COVERAGE=$(echo "$COVERAGE_RAW" | cut -d'.' -f1)
-              
-              # Determine color
               COLOR="red"
               if [ "$COVERAGE" -ge 80 ]; then COLOR="brightgreen"
               elif [ "$COVERAGE" -ge 70 ]; then COLOR="green"
               elif [ "$COVERAGE" -ge 60 ]; then COLOR="yellow"
               elif [ "$COVERAGE" -ge 50 ]; then COLOR="orange"
               fi
-              
-              # Update badge
               sed -i "s|frontend--coverage-[0-9]*%25-[a-z]*|frontend--coverage-${COVERAGE}%25-${COLOR}|g" README.md
               echo "✅ Updated frontend badge: ${COVERAGE}% (${COLOR})"
             fi
@@ -210,26 +298,18 @@ jobs:
       - name: Update backend badge in README
         run: |
           if [ -f "coverage-percentages/backend-coverage-percentage/coverage-percentage.txt" ]; then
-            # Read and validate coverage value
             COVERAGE_RAW=$(cat coverage-percentages/backend-coverage-percentage/coverage-percentage.txt)
-            
-            # Validate it's a number
             if ! [[ "$COVERAGE_RAW" =~ ^[0-9]+(\.[0-9]+)?$ ]]; then
               echo "⚠️  Warning: Invalid backend coverage format: $COVERAGE_RAW"
               echo "Skipping backend badge update"
             else
-              # Extract integer part
               COVERAGE=$(echo "$COVERAGE_RAW" | cut -d'.' -f1)
-              
-              # Determine color
               COLOR="red"
               if [ "$COVERAGE" -ge 80 ]; then COLOR="brightgreen"
               elif [ "$COVERAGE" -ge 70 ]; then COLOR="green"
               elif [ "$COVERAGE" -ge 60 ]; then COLOR="yellow"
               elif [ "$COVERAGE" -ge 50 ]; then COLOR="orange"
               fi
-              
-              # Update badge
               sed -i "s|backend--coverage-[0-9]*%25-[a-z]*|backend--coverage-${COVERAGE}%25-${COLOR}|g" README.md
               echo "✅ Updated backend badge: ${COVERAGE}% (${COLOR})"
             fi
@@ -247,11 +327,11 @@ jobs:
   # ====================== UPDATE KUSTOMIZE ======================
   update-kustomize:
     name: Update Kustomize Configurations
-    needs: [detect-changes, build-frontend-prod, build-backend-prod]
+    needs: [detect-changes, merge-frontend-prod, merge-backend-prod]
     runs-on: ubuntu-latest
     if: |
       always() && 
-      (needs.build-frontend-prod.result == 'success' || needs.build-backend-prod.result == 'success')
+      (needs.merge-frontend-prod.result == 'success' || needs.merge-backend-prod.result == 'success')
 
     steps:
       - name: Checkout repository
@@ -300,11 +380,9 @@ jobs:
         run: |
           VERSION=${{ steps.version.outputs.VERSION }}
 
-          # Check if there are changes to commit
           if git diff --quiet kustomize/; then
             echo "✅ No changes to commit (versions already up to date)"
           else
-            # Commit and push (prod overlay only — test tracks the moving :test tag)
             git add kustomize/overlays/prod/kustomization.yaml
             git commit -m "chore: update kustomize to ${VERSION} [skip ci]"
 
@@ -331,72 +409,69 @@ jobs:
           echo "### Updated Images" >> $GITHUB_STEP_SUMMARY
           echo "- Frontend: ghcr.io/dbca-wa/science-projects-frontend:${VERSION}" >> $GITHUB_STEP_SUMMARY
           echo "- Backend: ghcr.io/dbca-wa/science-projects-backend:${VERSION}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "### Next Steps" >> $GITHUB_STEP_SUMMARY
-          echo "1. Test environment will use new images" >> $GITHUB_STEP_SUMMARY
-          echo "2. Verify functionality in test environment" >> $GITHUB_STEP_SUMMARY
-          echo "3. Deploy to production when ready" >> $GITHUB_STEP_SUMMARY
 
   # ====================== CLEANUP OLD PACKAGE VERSIONS ======================
   cleanup-packages:
     name: Cleanup Old Package Versions
     runs-on: ubuntu-latest
-    needs: [build-frontend-prod, build-backend-prod]
+    needs: [merge-frontend-prod, merge-backend-prod]
     if: |
       always() &&
-      (needs.build-frontend-prod.result == 'success' || needs.build-backend-prod.result == 'success')
+      (needs.merge-frontend-prod.result == 'success' || needs.merge-backend-prod.result == 'success')
 
     steps:
-      # Step 1: Remove orphaned untagged versions (platform manifests from old builds)
-      # Keep 10 most recent untagged versions to support the 10 most recent tagged releases
-      - name: Cleanup untagged frontend versions
-        uses: actions/delete-package-versions@v5
-        with:
-          owner: dbca-wa
-          package-name: science-projects-frontend
-          package-type: container
-          min-versions-to-keep: 10
-          delete-only-untagged-versions: 'true'
-          token: ${{ secrets.GITHUB_TOKEN }}
+      # Release-safe pruning. A flat "keep N most recent versions" rule counts
+      # the moving test/test-* tags and per-arch build parts against the budget,
+      # which pushes real release manifests out of the window and deletes
+      # production images the cluster still needs.
+      #
+      # The prune script (.github/scripts/prune_ghcr.py) instead:
+      #   * keeps the newest KEEP_RELEASES releases chosen by SEMVER order, and
+      #     resolves each kept index's child digests from the registry so a kept
+      #     release can never be orphaned;
+      #   * always keeps 'stable' and the single latest 'test' build;
+      #   * prunes a beyond-quota release only once the quota is genuinely
+      #     exceeded, deleting that release and all its children together;
+      #   * removes orphaned untagged leftovers beyond KEEP_JUNK;
+      #   * ABORTS (deletes nothing) if it cannot resolve a release's children,
+      #     if the listing is empty, or if a deletion would ever hit a protected
+      #     version — so a bug or a flaky API can never eat a release.
+      - name: Checkout repository
+        uses: actions/checkout@v4
 
-      - name: Cleanup untagged backend versions
-        uses: actions/delete-package-versions@v5
-        with:
-          owner: dbca-wa
-          package-name: science-projects-backend
-          package-type: container
-          min-versions-to-keep: 10
-          delete-only-untagged-versions: 'true'
-          token: ${{ secrets.GITHUB_TOKEN }}
+      # Safety gate: the prune logic's guarantees are unit-tested. If the tests
+      # fail, the prune steps below do not run (this step is NOT best-effort).
+      - name: Verify prune logic (unit tests)
+        run: python3 .github/scripts/test_prune_ghcr.py
 
-      # Step 2: Remove old tagged versions, keeping the 10 most recent releases
-      # The 'stable' tag is always preserved via ignore-versions regex
-      - name: Cleanup old frontend releases
-        uses: actions/delete-package-versions@v5
-        with:
-          owner: dbca-wa
-          package-name: science-projects-frontend
-          package-type: container
-          min-versions-to-keep: 10
-          ignore-versions: '^stable$'
-          token: ${{ secrets.GITHUB_TOKEN }}
+      # KEEP_RELEASES: tagged semver releases to retain, each with all children.
+      # KEEP_JUNK: orphaned untagged leftover layers to retain (recent history).
+      - name: Prune frontend package versions
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_OWNER: dbca-wa
+          GHCR_PACKAGE: science-projects-frontend
+          KEEP_RELEASES: '15'
+          KEEP_JUNK: '10'
+        run: python3 .github/scripts/prune_ghcr.py
 
-      - name: Cleanup old backend releases
-        uses: actions/delete-package-versions@v5
-        with:
-          owner: dbca-wa
-          package-name: science-projects-backend
-          package-type: container
-          min-versions-to-keep: 10
-          ignore-versions: '^stable$'
-          token: ${{ secrets.GITHUB_TOKEN }}
+      - name: Prune backend package versions
+        continue-on-error: true
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          GHCR_OWNER: dbca-wa
+          GHCR_PACKAGE: science-projects-backend
+          KEEP_RELEASES: '15'
+          KEEP_JUNK: '10'
+        run: python3 .github/scripts/prune_ghcr.py
 
   # ====================== VULNERABILITY SCAN ======================
   scan-frontend:
     name: Scan Frontend Image
     runs-on: ubuntu-latest
-    needs: [build-frontend-prod]
-    if: needs.build-frontend-prod.result == 'success'
+    needs: [merge-frontend-prod]
+    if: needs.merge-frontend-prod.result == 'success'
 
     steps:
       - name: Checkout code
@@ -486,8 +561,8 @@ jobs:
   scan-backend:
     name: Scan Backend Image
     runs-on: ubuntu-latest
-    needs: [build-backend-prod]
-    if: needs.build-backend-prod.result == 'success'
+    needs: [merge-backend-prod]
+    if: needs.merge-backend-prod.result == 'success'
 
     steps:
       - name: Checkout code

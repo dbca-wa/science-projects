@@ -2,7 +2,7 @@
 
 # ======================== BUILD STAGE ========================
 # Uses deps and env vars to bake / build the app
-FROM oven/bun:1.3.14-alpine AS build_image
+FROM oven/bun:1.4.2-alpine AS build_image
 
 WORKDIR /app
 
@@ -34,7 +34,7 @@ RUN bun run ${BUILD_SCRIPT}
 
 # ======================== PRODUCTION STAGE ========================
 # Uses built app and lightweight server without large dependencies
-FROM oven/bun:1.3.14-slim AS production_image
+FROM oven/bun:1.4.2-slim AS production_image
 
 WORKDIR /client
 
