@@ -2,7 +2,7 @@
 # Multi-stage production Dockerfile for Django backend with Prince XML
 
 # ====================== BUILD STAGE ======================
-FROM python:3.14-slim-bookworm AS builder
+FROM python:3.14-slim-trixie AS builder
 
 # Build environment variables
 ENV PYTHONUNBUFFERED=1
@@ -30,9 +30,9 @@ ENV PATH="${PATH}:/etc/poetry/bin"
 RUN DEB_FILE=prince.deb \
     && ARCH=$(dpkg --print-architecture) \
     && if [ "$ARCH" = "arm64" ]; then \
-    PRINCE_URL="https://www.princexml.com/download/prince_16.2-1_debian12_arm64.deb"; \
+    PRINCE_URL="https://www.princexml.com/download/prince_16.2-1_debian13_arm64.deb"; \
     else \
-    PRINCE_URL="https://www.princexml.com/download/prince_16.2-1_debian12_amd64.deb"; \
+    PRINCE_URL="https://www.princexml.com/download/prince_16.2-1_debian13_amd64.deb"; \
     fi \
     && wget -O ${DEB_FILE} $PRINCE_URL \
     && yes | gdebi ${DEB_FILE} \
@@ -93,7 +93,7 @@ RUN echo "Removing development artifacts..." \
     && rm -f entrypoint.sh 2>/dev/null || true
 
 # ====================== PRODUCTION STAGE ======================
-FROM python:3.14-slim-bookworm AS production
+FROM python:3.14-slim-trixie AS production
 
 # Production environment variables
 ENV PYTHONUNBUFFERED=1
@@ -101,35 +101,40 @@ ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONPATH=/usr/src/app/backend
 ENV TZ="Australia/Perth"
 
-# Install only runtime dependencies
+# Install only runtime dependencies.
+# Prince is installed from its .deb with dpkg + apt's dependency resolver, so we
+# avoid gdebi — gdebi is a GTK application that would drag ~100 MB of GTK, icon
+# themes and Perl into a headless server image purely to run the installer.
 RUN echo "Installing Runtime Dependencies." && apt-get update && apt-get install -y \
     -o Acquire::Retries=4 --no-install-recommends \
     curl ca-certificates wget \
-    gdebi \
     fontconfig fonts-dejavu-core \
     libgif7 \
     libwebp7 libwebpdemux2 \
-    libavif15 \
+    libavif16 \
     postgresql-client \
-    && apt-get upgrade -y \
-    && apt-get clean \
-    && rm -rf /var/lib/apt/lists/* \
-    && rm -rf /var/cache/apt/archives/*
+    && apt-get upgrade -y
 
 # Set working directory
 WORKDIR /usr/src/app
 
-# Install Prince XML in production stage (ensures all files are in correct locations)
+# Install Prince XML in production stage (ensures all files are in correct locations).
+# dpkg -i unpacks it; apt-get install -f pulls only Prince's real runtime deps
+# (no --install-recommends), then we clear apt caches in the same layer.
 RUN DEB_FILE=prince.deb \
     && ARCH=$(dpkg --print-architecture) \
     && if [ "$ARCH" = "arm64" ]; then \
-    PRINCE_URL="https://www.princexml.com/download/prince_16.2-1_debian12_arm64.deb"; \
+    PRINCE_URL="https://www.princexml.com/download/prince_16.2-1_debian13_arm64.deb"; \
     else \
-    PRINCE_URL="https://www.princexml.com/download/prince_16.2-1_debian12_amd64.deb"; \
+    PRINCE_URL="https://www.princexml.com/download/prince_16.2-1_debian13_amd64.deb"; \
     fi \
     && wget -O ${DEB_FILE} $PRINCE_URL \
-    && yes | gdebi ${DEB_FILE} \
-    && rm -f ${DEB_FILE}
+    && (dpkg -i ${DEB_FILE} || true) \
+    && apt-get install -y -f --no-install-recommends \
+    && rm -f ${DEB_FILE} \
+    && apt-get clean \
+    && rm -rf /var/lib/apt/lists/* \
+    && rm -rf /var/cache/apt/archives/*
 ENV PATH="${PATH}:/usr/lib/prince/bin"
 
 # Copy Python packages from builder stage
