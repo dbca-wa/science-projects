@@ -2,6 +2,7 @@ import { memo, useMemo } from "react";
 import { Button } from "@/shared/components/ui/button";
 import { useWindowSize } from "@/shared/hooks/useWindowSize";
 import { BREAKPOINTS } from "@/shared/constants/breakpoints";
+import { scrollMainContentToTop } from "@/shared/utils/scroll.utils";
 
 interface PaginationProps {
 	currentPage: number;
@@ -59,7 +60,7 @@ export const Pagination = memo<PaginationProps>(
 
 		const handleClick = (pageNumber: number) => {
 			onPageChange(pageNumber);
-			window.scrollTo({ top: 0, behavior: "smooth" });
+			scrollMainContentToTop("smooth");
 		};
 
 		return (

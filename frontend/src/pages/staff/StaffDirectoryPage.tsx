@@ -8,6 +8,7 @@ import { Button } from "@/shared/components/ui/button";
 import { Skeleton } from "@/shared/components/ui/skeleton";
 import { Search, ChevronLeft, ChevronRight } from "lucide-react";
 import StaffProfileCard from "@/features/staff-profiles/components/directory/StaffProfileCard";
+import { scrollMainContentToTop } from "@/shared/utils/scroll.utils";
 
 const PAGE_SIZE = 24;
 
@@ -66,7 +67,7 @@ const StaffDirectoryPage = () => {
 			page: newPage.toString(),
 			...(showHidden && { showHidden: "true" }),
 		});
-		window.scrollTo({ top: 0, behavior: "smooth" });
+		scrollMainContentToTop("smooth");
 	};
 
 	const toggleHiddenProfiles = () => {

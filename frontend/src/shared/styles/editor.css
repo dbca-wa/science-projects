@@ -1248,8 +1248,13 @@
 
 .dark .editor-input-display table td,
 .dark .editor-readonly .editor-input-display table td {
-	background-color: rgb(31 41 55); /* grey-800 */
-	border-color: rgb(75 85 99); /* grey-600 — matches edit mode dark */
+	/* !important beats the inline background/border baked into seeded
+	   concept/project plan tables (FTE + budget), which would otherwise
+	   keep value cells light in dark mode. */
+	background-color: rgb(31 41 55) !important; /* grey-800 */
+	border-color: rgb(
+		75 85 99
+	) !important; /* grey-600 — matches edit mode dark */
 }
 
 .editor-input-display table td p,
@@ -1277,8 +1282,15 @@
 
 .dark .editor-input-display table th,
 .dark .editor-readonly .editor-input-display table th {
-	background-color: rgb(31 41 55); /* grey-800 */
-	border-color: rgb(75 85 99); /* grey-600 — matches edit mode dark */
+	/* Seeded concept/project plan tables (FTE + budget) carry an inline
+	   light background (rgb(242, 243, 245)) and black border on every
+	   header-row and first-column <th>. Inline styles beat plain class
+	   rules, so these cells stayed light in dark mode. !important lets
+	   the dark theme win; the inherited light text then reads correctly. */
+	background-color: rgb(31 41 55) !important; /* grey-800 */
+	border-color: rgb(
+		75 85 99
+	) !important; /* grey-600 — matches edit mode dark */
 }
 
 .editor-input-display table th p,
@@ -1290,6 +1302,24 @@
 .editor-input-display table th p:last-child,
 .editor-readonly .editor-input-display table th p:last-child {
 	margin-bottom: 0;
+}
+
+/* Edit mode: the same seeded tables load into the live Lexical editor
+   (.editor-input) and can retain their inline light <th> background and
+   black border. Mirror the dark override here so header-row and
+   first-column cells also read correctly while editing in dark mode.
+   Covers both the legacy seeded classes and Lexical's own cell classes. */
+.dark .editor-input table th,
+.dark .editor-input th.table-cell-header-light,
+.dark .editor-input .editor-table-cell-header {
+	background-color: rgb(31 41 55) !important; /* grey-800 */
+	border-color: rgb(75 85 99) !important; /* grey-600 */
+}
+
+.dark .editor-input table td,
+.dark .editor-input td.table-cell-light,
+.dark .editor-input .editor-table-cell {
+	border-color: rgb(75 85 99) !important; /* grey-600 */
 }
 
 /* ============================================ */
