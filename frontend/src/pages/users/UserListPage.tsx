@@ -144,7 +144,6 @@ const UserListPage = observer(() => {
 
 	const handlePageChange = (newPage: number) => {
 		userSearchStore.setCurrentPage(newPage);
-		window.scrollTo({ top: 0, behavior: "smooth" });
 	};
 
 	const handleToggleSaveSearch = () => {
