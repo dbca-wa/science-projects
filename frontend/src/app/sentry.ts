@@ -75,6 +75,23 @@ export function initSentry() {
 			if (import.meta.env.DEV && !import.meta.env.VITE_SENTRY_DEBUG) {
 				return null;
 			}
+
+			// Drop a known, harmless crash inside the bundled web-vitals
+			// instrumentation. After a soft navigation a queued performance-entry
+			// callback can run on idle once the entry has already been cleared,
+			// producing "Cannot read properties of undefined (reading 'startTime')"
+			// in reportAllChanges. This is an upstream library defect that does not
+			// affect the application, so we suppress it rather than report noise.
+			const containsWebVitalsStartTimeError = event.exception?.values?.some(
+				(value) =>
+					value.type === "TypeError" &&
+					typeof value.value === "string" &&
+					value.value.includes("reading 'startTime'")
+			);
+			if (containsWebVitalsStartTimeError) {
+				return null;
+			}
+
 			return event;
 		},
 	});
