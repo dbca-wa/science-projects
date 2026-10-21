@@ -26,9 +26,10 @@ interface CommentThreadProps {
 /**
  * CommentThread Component
  *
- * Displays a parent comment with collapsible nested replies.
+ * Displays a top-level comment with its collapsible replies.
  * Shows reply count badge and toggle button for expanding/collapsing replies.
- * Visually indents nested replies (max 3 levels).
+ * Replies are flattened to a single visual level; a reply that targets another
+ * reply shows a "Replying to {name}" label rather than deeper indentation.
  * Supports highlighting specific comments from anchor links.
  */
 export const CommentThread = ({
