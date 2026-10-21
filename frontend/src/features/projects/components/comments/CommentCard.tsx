@@ -355,13 +355,24 @@ export const CommentCard = ({
 										{/* Wide cards (≥380px): show inline on hover. Narrow cards (<380px): show button always */}
 										{canComment && !isAuthor && !userHasReaction && (
 											<>
-												{/* Inline picker for wide cards - hidden on narrow, shown on hover */}
-												<div className="hidden @[380px]:group-hover:block">
-													<ReactionPicker
-														onReactionSelect={handleReactionSelect}
-														currentUserReaction={currentUserReaction}
-														forceButtonMode={false}
-													/>
+												{/* Inline picker for wide cards - hidden on narrow, floated on hover.
+												    The relative wrapper collapses to a zero-size box (its only child is
+												    absolutely positioned), so revealing the picker on hover never reflows
+												    the action row. */}
+												<div
+													data-testid="inline-reaction-picker-slot"
+													className="relative hidden @[380px]:block"
+												>
+													<div
+														data-testid="inline-reaction-picker-overlay"
+														className="absolute bottom-full left-0 mb-1 z-20 hidden @[380px]:group-hover:block"
+													>
+														<ReactionPicker
+															onReactionSelect={handleReactionSelect}
+															currentUserReaction={currentUserReaction}
+															forceButtonMode={false}
+														/>
+													</div>
 												</div>
 												{/* Button picker for narrow cards - always visible */}
 												<div className="block @[380px]:hidden">

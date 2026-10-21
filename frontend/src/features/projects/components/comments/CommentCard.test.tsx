@@ -181,3 +181,58 @@ describe("CommentCard - Replies", () => {
 		expect(screen.queryByText(/Replying to/)).not.toBeInTheDocument();
 	});
 });
+
+describe("CommentCard - Inline reaction picker overlay", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	// The inline (wide-card) reaction picker is floated out of flow so revealing it
+	// on hover does not reflow the action row. These assertions cover the static
+	// positioning classes; the live 'no sibling movement on hover' confirmation is a
+	// manual/visual check pending a browser (hover + @container queries are not
+	// exercised by jsdom).
+	it("floats the inline picker as an out-of-flow overlay above and left-anchored", () => {
+		const comment = createMockComment({ id: 20 });
+		const { container } = renderWithProviders(
+			<CommentCard
+				comment={comment}
+				projectId={1}
+				project={null}
+				canComment={true}
+			/>
+		);
+
+		const overlay = container.querySelector(
+			'[data-testid="inline-reaction-picker-overlay"]'
+		);
+		expect(overlay).toBeInTheDocument();
+		// Out of flow, floated above the zero-height slot, anchored to the left.
+		expect(overlay).toHaveClass("absolute");
+		expect(overlay).toHaveClass("bottom-full");
+		expect(overlay).toHaveClass("left-0");
+	});
+
+	it("keeps the picker slot as a zero-size relative anchor that does not reflow the row", () => {
+		const comment = createMockComment({ id: 21 });
+		const { container } = renderWithProviders(
+			<CommentCard
+				comment={comment}
+				projectId={1}
+				project={null}
+				canComment={true}
+			/>
+		);
+
+		const slot = container.querySelector(
+			'[data-testid="inline-reaction-picker-slot"]'
+		);
+		expect(slot).toBeInTheDocument();
+		// Relative anchor whose only child is absolutely positioned, so it contributes
+		// no layout size to the action row.
+		expect(slot).toHaveClass("relative");
+		expect(slot?.children).toHaveLength(1);
+		const onlyChild = slot?.children[0];
+		expect(onlyChild).toHaveClass("absolute");
+	});
+});
