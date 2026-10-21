@@ -129,3 +129,55 @@ describe("CommentCard - Anchor Links", () => {
 		expect(screen.getByText("[Comment deleted]")).toBeInTheDocument();
 	});
 });
+
+describe("CommentCard - Replies", () => {
+	beforeEach(() => {
+		vi.clearAllMocks();
+	});
+
+	it("should render the reply button on a reply card", () => {
+		const reply = createMockComment({ id: 10, parent_comment: 1 });
+		renderWithProviders(
+			<CommentCard
+				comment={reply}
+				projectId={1}
+				project={null}
+				canComment={true}
+				onReply={vi.fn()}
+			/>
+		);
+
+		expect(screen.getByText("Reply")).toBeInTheDocument();
+	});
+
+	it("should render the 'Replying to' label when replyingToName is set", () => {
+		const reply = createMockComment({ id: 11, parent_comment: 5 });
+		renderWithProviders(
+			<CommentCard
+				comment={reply}
+				projectId={1}
+				project={null}
+				canComment={true}
+				onReply={vi.fn()}
+				replyingToName="Jane Smith"
+			/>
+		);
+
+		expect(screen.getByText("Replying to Jane Smith")).toBeInTheDocument();
+	});
+
+	it("should not render a 'Replying to' label when replyingToName is absent", () => {
+		const reply = createMockComment({ id: 12, parent_comment: 1 });
+		renderWithProviders(
+			<CommentCard
+				comment={reply}
+				projectId={1}
+				project={null}
+				canComment={true}
+				onReply={vi.fn()}
+			/>
+		);
+
+		expect(screen.queryByText(/Replying to/)).not.toBeInTheDocument();
+	});
+});

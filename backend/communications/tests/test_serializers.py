@@ -16,6 +16,7 @@ from communications.serializers import (
     TinyDirectMessageSerializer,
     TinyReactionSerializer,
 )
+from users.utils import get_user_display_name
 
 
 class TestTinyDirectMessageSerializer:
@@ -164,6 +165,7 @@ class TestTinyCommentSerializer:
             "document",
             "text",
             "parent_comment",
+            "parent_author_name",
             "created_at",
             "updated_at",
             "reactions",
@@ -171,6 +173,160 @@ class TestTinyCommentSerializer:
             "reply_count",
             "has_replies",
         }
+
+
+class TestCommentThreading:
+    """Tests for flattened two-level threading in CommentSerializer"""
+
+    @pytest.mark.integration
+    def test_root_replies_return_flattened_subtree_ordered(
+        self, user, other_user, project_document, db
+    ):
+        """A root's get_replies returns the full subtree ordered by created_at"""
+        from communications.models import Comment
+
+        root = Comment.objects.create(user=user, document=project_document, text="Root")
+        child = Comment.objects.create(
+            user=other_user,
+            document=project_document,
+            text="Child",
+            parent_comment=root,
+        )
+        grandchild = Comment.objects.create(
+            user=user,
+            document=project_document,
+            text="Grandchild",
+            parent_comment=child,
+        )
+
+        data = CommentSerializer(root).data
+        reply_ids = [reply["id"] for reply in data["replies"]]
+
+        assert reply_ids == [child.id, grandchild.id]
+
+    @pytest.mark.integration
+    def test_non_root_replies_return_empty(
+        self, user, other_user, project_document, db
+    ):
+        """A non-root comment returns an empty replies list"""
+        from communications.models import Comment
+
+        root = Comment.objects.create(user=user, document=project_document, text="Root")
+        child = Comment.objects.create(
+            user=other_user,
+            document=project_document,
+            text="Child",
+            parent_comment=root,
+        )
+        Comment.objects.create(
+            user=user,
+            document=project_document,
+            text="Grandchild",
+            parent_comment=child,
+        )
+
+        data = CommentSerializer(child).data
+
+        assert data["replies"] == []
+
+    @pytest.mark.integration
+    def test_root_reply_count_equals_subtree_size(
+        self, user, other_user, project_document, db
+    ):
+        """reply_count reflects the full subtree, not just direct children"""
+        from communications.models import Comment
+
+        root = Comment.objects.create(user=user, document=project_document, text="Root")
+        child = Comment.objects.create(
+            user=other_user,
+            document=project_document,
+            text="Child",
+            parent_comment=root,
+        )
+        Comment.objects.create(
+            user=user,
+            document=project_document,
+            text="Grandchild",
+            parent_comment=child,
+        )
+
+        data = CommentSerializer(root).data
+
+        assert data["reply_count"] == 2
+        assert data["has_replies"] is True
+
+    @pytest.mark.integration
+    def test_grandchild_parent_author_name_is_parent_author(
+        self, user, other_user, project_document, db
+    ):
+        """A grandchild resolves parent_author_name to its parent's author"""
+        from communications.models import Comment
+
+        root = Comment.objects.create(user=user, document=project_document, text="Root")
+        child = Comment.objects.create(
+            user=other_user,
+            document=project_document,
+            text="Child",
+            parent_comment=root,
+        )
+        grandchild = Comment.objects.create(
+            user=user,
+            document=project_document,
+            text="Grandchild",
+            parent_comment=child,
+        )
+
+        data = TinyCommentSerializer(grandchild).data
+
+        assert data["parent_author_name"] == get_user_display_name(other_user)
+
+    @pytest.mark.integration
+    def test_parent_author_name_survives_soft_deleted_parent(
+        self, user, other_user, project_document, db
+    ):
+        """parent_author_name still resolves when the parent is soft-removed"""
+        from communications.models import Comment
+
+        root = Comment.objects.create(user=user, document=project_document, text="Root")
+        child = Comment.objects.create(
+            user=other_user,
+            document=project_document,
+            text="Child",
+            parent_comment=root,
+        )
+        grandchild = Comment.objects.create(
+            user=user,
+            document=project_document,
+            text="Grandchild",
+            parent_comment=child,
+        )
+
+        child.is_removed = True
+        child.save()
+        grandchild.refresh_from_db()
+
+        data = TinyCommentSerializer(grandchild).data
+
+        assert data["parent_author_name"] == get_user_display_name(other_user)
+
+    @pytest.mark.integration
+    def test_direct_reply_to_root_has_no_parent_author_name(
+        self, user, other_user, project_document, db
+    ):
+        """A direct reply to the root has no parent_author_name label"""
+        from communications.models import Comment
+
+        root = Comment.objects.create(user=user, document=project_document, text="Root")
+        child = Comment.objects.create(
+            user=other_user,
+            document=project_document,
+            text="Child",
+            parent_comment=root,
+        )
+
+        data = TinyCommentSerializer(child).data
+
+        assert data["parent_author_name"] is None
 
 
 class TestTinyCommentCreateSerializer:

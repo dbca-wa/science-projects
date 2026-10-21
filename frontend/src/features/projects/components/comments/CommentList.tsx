@@ -105,15 +105,10 @@ export const CommentList = ({
 		);
 	}
 
-	// Comments list - only show top-level comments (no parent)
-	// Replies are displayed within CommentThread component
-	const topLevelComments = comments.filter(
-		(comment) => !comment.parent_comment
-	);
-
+	// The response is already roots-only; replies render within CommentThread
 	return (
 		<div className="space-y-4">
-			{topLevelComments.map((comment) => (
+			{comments.map((comment) => (
 				<CommentThread
 					key={comment.id}
 					comment={comment}

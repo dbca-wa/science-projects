@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Pencil, Trash2, Reply, Check, X } from "lucide-react";
+import { Pencil, Trash2, Reply, Check, X, CornerDownRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCurrentUser } from "@/features/auth";
 import {
@@ -59,7 +59,7 @@ interface CommentCardProps {
 	) => Promise<void>;
 	onDelete?: (commentId: number) => void;
 	onReply?: (parentCommentId: number) => void;
-	isReply?: boolean;
+	replyingToName?: string;
 	isHighlighted?: boolean;
 	isEditing?: boolean;
 	onCancelEdit?: () => void;
@@ -83,7 +83,7 @@ export const CommentCard = ({
 	onUpdate,
 	onDelete,
 	onReply,
-	isReply = false,
+	replyingToName,
 	isHighlighted = false,
 	isEditing = false,
 	onCancelEdit,
@@ -335,6 +335,14 @@ export const CommentCard = ({
 										{isEdited && <EditTooltip editedAt={comment.updated_at} />}
 									</div>
 
+									{/* Reply reference line */}
+									{replyingToName && (
+										<div className="flex items-center gap-1 mb-1 text-xs text-muted-foreground">
+											<CornerDownRight className="h-3 w-3" />
+											<span>Replying to {replyingToName}</span>
+										</div>
+									)}
+
 									{/* Comment Content */}
 									<div className="text-sm mb-2">
 										<CommentRichTextDisplay html={comment.text} />
@@ -367,7 +375,7 @@ export const CommentCard = ({
 										)}
 
 										{/* Reply Button - only show if user can comment */}
-										{canComment && !isReply && onReply && (
+										{canComment && onReply && (
 											<Tooltip>
 												<TooltipTrigger asChild>
 													<Button

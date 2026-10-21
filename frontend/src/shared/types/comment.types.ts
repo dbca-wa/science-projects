@@ -28,11 +28,7 @@ export interface ITinyDocument {
  * Matches backend ReactionChoices
  */
 export type ReactionType =
-	| "thumbup"
-	| "heart"
-	| "funny"
-	| "confused"
-	| "surprised";
+	"thumbup" | "heart" | "funny" | "confused" | "surprised";
 
 /**
  * Reaction on a comment
@@ -91,6 +87,8 @@ export interface IComment {
 	text: string;
 	/** Parent comment ID for threaded replies (null for top-level comments) */
 	parent_comment: number | null;
+	/** Display name of the author this reply is addressed to (null when no label is needed) */
+	parent_author_name?: string | null;
 	/** IP address of commenter */
 	ip_address?: string;
 	/** Whether comment is public */

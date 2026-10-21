@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { CommentCard } from "./CommentCard";
 import { Button } from "@/shared/components/ui/button";
@@ -56,6 +56,16 @@ export const CommentThread = ({
 	// Initialise expanded state - auto-expand if a reply is highlighted
 	const [isExpanded, setIsExpanded] = useState(hasHighlightedReply || false);
 
+	// Auto-expand when a new reply arrives so the posted reply is visible
+	// without a manual expand
+	const prevReplyCountRef = useRef(comment.reply_count);
+	useEffect(() => {
+		if (comment.reply_count > prevReplyCountRef.current) {
+			setIsExpanded(true);
+		}
+		prevReplyCountRef.current = comment.reply_count;
+	}, [comment.reply_count]);
+
 	return (
 		<div className="space-y-4">
 			{/* Parent Comment */}
@@ -112,7 +122,11 @@ export const CommentThread = ({
 									onReply={onReply}
 									isEditing={editingCommentId === reply.id}
 									onCancelEdit={onCancelEdit}
-									isReply
+									replyingToName={
+										reply.parent_comment === comment.id
+											? undefined
+											: (reply.parent_author_name ?? undefined)
+									}
 									isHighlighted={highlightedCommentId === reply.id}
 									canComment={canComment}
 									project={project}

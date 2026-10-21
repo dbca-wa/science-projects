@@ -1,10 +1,12 @@
 # region Imports ================================================================================================
 
+from django.conf import settings
 from rest_framework import serializers
 from rest_framework.serializers import ModelSerializer, SerializerMethodField
 
 from documents.serializers import TinyProjectDocumentSerializer
 from users.serializers import TinyUserSerializer
+from users.utils import get_user_display_name
 
 from .models import ChatRoom, Comment, CommentMention, DirectMessage, Reaction
 
@@ -69,6 +71,7 @@ class TinyCommentSerializer(ModelSerializer):
     mentions = CommentMentionSerializer(many=True, read_only=True)
     reply_count = SerializerMethodField()
     has_replies = SerializerMethodField()
+    parent_author_name = SerializerMethodField()
 
     class Meta:
         model = Comment
@@ -78,6 +81,7 @@ class TinyCommentSerializer(ModelSerializer):
             "document",
             "text",
             "parent_comment",
+            "parent_author_name",
             "created_at",
             "updated_at",
             "reactions",
@@ -93,6 +97,26 @@ class TinyCommentSerializer(ModelSerializer):
     def get_has_replies(self, obj):
         """Check if comment has any replies"""
         return obj.replies.filter(is_removed=False).exists()
+
+    def get_parent_author_name(self, obj):
+        """Resolve the display name of the author this reply is addressed to.
+
+        Returns None for top-level comments and for direct replies to a
+        top-level comment (no label is needed in those cases). For deeper
+        replies the parent author's display name is returned even when the
+        parent has been soft-removed, so the reference line stays meaningful.
+        """
+        if obj.parent_comment_id is None:
+            return None
+
+        parent = obj.parent_comment
+        if parent is None or parent.parent_comment_id is None:
+            return None
+
+        if parent.user is None:
+            return None
+
+        return get_user_display_name(parent.user)
 
 
 class TinyCommentCreateSerializer(ModelSerializer):
@@ -168,19 +192,79 @@ class CommentSerializer(ModelSerializer):
             "has_replies",
         ]
 
+    def _collect_subtree(self, obj):
+        """Breadth-first walk of all non-removed descendants of a root comment.
+
+        Returns the descendants concatenated level by level and sorted by
+        creation time, so the flattened thread renders in chronological order.
+        """
+        collected = []
+        visited_ids = set()
+        current_level = list(obj.replies.filter(is_removed=False))
+
+        while current_level:
+            level_ids = []
+            for reply in current_level:
+                if reply.pk in visited_ids:
+                    continue
+                visited_ids.add(reply.pk)
+                collected.append(reply)
+                level_ids.append(reply.pk)
+
+            if not level_ids:
+                break
+
+            current_level = list(
+                Comment.objects.filter(
+                    parent_comment_id__in=level_ids,
+                    is_removed=False,
+                ).exclude(pk__in=visited_ids)
+            )
+
+        collected.sort(key=lambda reply: reply.created_at)
+        return collected
+
     def get_replies(self, obj):
-        """Get direct replies to this comment (not nested further)"""
-        # Only include non-removed replies
-        replies = obj.replies.filter(is_removed=False).order_by("created_at")
-        return TinyCommentSerializer(replies, many=True).data
+        """Return the flattened subtree of replies for a root comment.
+
+        Non-root comments return an empty list because the full thread is
+        rendered under its top-level ancestor. On any error the direct
+        children are returned so the thread degrades gracefully.
+        """
+        if obj.parent_comment_id is not None:
+            return []
+
+        try:
+            replies = self._collect_subtree(obj)
+            return TinyCommentSerializer(replies, many=True).data
+        except Exception as e:
+            settings.LOGGER.error(
+                f"Failed to collect reply subtree for comment {obj.pk}: {e}"
+            )
+            direct_children = obj.replies.filter(is_removed=False).order_by(
+                "created_at"
+            )
+            return TinyCommentSerializer(direct_children, many=True).data
 
     def get_reply_count(self, obj):
-        """Get count of direct replies to this comment"""
-        return obj.replies.filter(is_removed=False).count()
+        """Get the full subtree size so the toggle label matches the cards"""
+        try:
+            return len(self._collect_subtree(obj))
+        except Exception as e:
+            settings.LOGGER.error(
+                f"Failed to count reply subtree for comment {obj.pk}: {e}"
+            )
+            return obj.replies.filter(is_removed=False).count()
 
     def get_has_replies(self, obj):
-        """Check if comment has any replies"""
-        return obj.replies.filter(is_removed=False).exists()
+        """Check if the comment has any replies in its subtree"""
+        try:
+            return len(self._collect_subtree(obj)) > 0
+        except Exception as e:
+            settings.LOGGER.error(
+                f"Failed to check reply subtree for comment {obj.pk}: {e}"
+            )
+            return obj.replies.filter(is_removed=False).exists()
 
 
 # Chat Rooms & Direct Messages --------------------------------------------------------------------------------------------
