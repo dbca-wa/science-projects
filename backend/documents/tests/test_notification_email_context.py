@@ -727,6 +727,128 @@ class TestNotifyCommentMention:
         # Should only send one email despite duplicate mention
         assert mock_send.call_count == 1
 
+    @patch("documents.services.notification_service.send_email_with_embedded_image")
+    def test_returns_sent_and_emailed_ids_for_sent_recipient(self, mock_send):
+        mentioned = UserFactory(
+            first_name="Jane",
+            last_name="Smith",
+            email="jane.smith@dbca.wa.gov.au",
+            is_active=True,
+            is_staff=True,
+        )
+        concept_plan = ConceptPlanFactory()
+
+        result = NotificationService.notify_comment_mention(
+            document_id=concept_plan.document.pk,
+            project_id=concept_plan.document.project.pk,
+            commenter_data={"name": "John Doe"},
+            mentioned_users=[
+                {
+                    "id": mentioned.pk,
+                    "name": "Jane Smith",
+                    "email": "jane.smith@dbca.wa.gov.au",
+                }
+            ],
+            comment_content="Please review",
+        )
+
+        assert result["sent"] is True
+        assert mentioned.pk in result["emailed_user_ids"]
+
+    @patch("documents.services.notification_service.send_email_with_embedded_image")
+    def test_returns_not_sent_and_empty_ids_for_unsent_recipient(self, mock_send):
+        mentioned = UserFactory(
+            first_name="External",
+            last_name="User",
+            email="external@gmail.com",
+            is_active=True,
+            is_staff=True,
+        )
+        concept_plan = ConceptPlanFactory()
+
+        result = NotificationService.notify_comment_mention(
+            document_id=concept_plan.document.pk,
+            project_id=concept_plan.document.project.pk,
+            commenter_data={"name": "John"},
+            mentioned_users=[
+                {
+                    "id": mentioned.pk,
+                    "name": "External User",
+                    "email": "external@gmail.com",
+                }
+            ],
+            comment_content="test",
+        )
+
+        assert result["sent"] is False
+        assert result["emailed_user_ids"] == []
+
+
+# ─── Comment Reply Email Tests ────────────────────────────────────────────────
+
+
+@pytest.mark.django_db
+class TestNotifyCommentReply:
+    """Test notify_comment_reply."""
+
+    @patch("documents.services.notification_service.send_email_with_embedded_image")
+    def test_eligible_parent_author_receives_reply_email(self, mock_send):
+        parent_author = UserFactory(
+            first_name="Pat",
+            last_name="Author",
+            email="pat.author@dbca.wa.gov.au",
+            is_active=True,
+            is_staff=True,
+        )
+        concept_plan = ConceptPlanFactory()
+
+        result = NotificationService.notify_comment_reply(
+            document_id=concept_plan.document.pk,
+            project_id=concept_plan.document.project.pk,
+            replier_data={"name": "Robin Replier"},
+            parent_author={
+                "id": parent_author.pk,
+                "name": "Pat Author",
+                "email": "pat.author@dbca.wa.gov.au",
+            },
+            comment_content="Thanks for raising this.",
+        )
+
+        assert result["sent"] is True
+        assert mock_send.call_count == 1
+        assert mock_send.call_args[1]["recipient_email"] == [
+            "pat.author@dbca.wa.gov.au"
+        ]
+        html = mock_send.call_args[1]["html_content"]
+        assert "Robin Replier" in html
+        assert "Thanks for raising this." in html
+
+    @patch("documents.services.notification_service.send_email_with_embedded_image")
+    def test_ineligible_parent_author_receives_no_reply_email(self, mock_send):
+        parent_author = UserFactory(
+            first_name="Sam",
+            last_name="External",
+            email="sam.external@gmail.com",
+            is_active=True,
+            is_staff=True,
+        )
+        concept_plan = ConceptPlanFactory()
+
+        result = NotificationService.notify_comment_reply(
+            document_id=concept_plan.document.pk,
+            project_id=concept_plan.document.project.pk,
+            replier_data={"name": "Robin Replier"},
+            parent_author={
+                "id": parent_author.pk,
+                "name": "Sam External",
+                "email": "sam.external@gmail.com",
+            },
+            comment_content="Thanks for raising this.",
+        )
+
+        assert result["sent"] is False
+        assert not mock_send.called
+
 
 # ─── Batch Approved Email Tests ───────────────────────────────────────────────
 

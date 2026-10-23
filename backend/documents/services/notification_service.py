@@ -72,6 +72,65 @@ def _build_project_url(project):
     return f"{settings.SITE_URL}/projects/{project.pk}"
 
 
+def _build_comment_document_url(document, project):
+    """Build the document URL used in comment notification emails.
+
+    For progress reports and student reports, the URL includes a ?FY= query
+    parameter so the link opens the correct financial year.
+    """
+    url_safe_kind_dict = {
+        "concept": "concept",
+        "projectplan": "project",
+        "progressreport": "progress",
+        "studentreport": "student",
+        "projectclosure": "closure",
+    }
+    document_url = (
+        f"{settings.SITE_URL}/projects/{project.pk}/"
+        f"{url_safe_kind_dict[document.kind]}"
+    )
+
+    if document.kind == "progressreport":
+        report_detail = document.progress_report_details.first()
+        if report_detail and report_detail.year:
+            year = report_detail.year
+            document_url += f"?FY={year - 1}-{str(year)[2:]}"
+    elif document.kind == "studentreport":
+        report_detail = document.student_report_details.first()
+        if report_detail and report_detail.year:
+            year = report_detail.year
+            document_url += f"?FY={year - 1}-{str(year)[2:]}"
+
+    return document_url
+
+
+def _clean_comment_html(html_content):
+    """Strip mention spans from comment HTML, returning readable plain text.
+
+    Removes spans flagged as Lexical mentions (data-lexical-mention="true") or
+    carrying a data-user-id attribute, replacing each with its text content.
+    """
+    from bs4 import BeautifulSoup
+
+    if not html_content:
+        return ""
+
+    def _is_mention_span(tag):
+        if tag.name != "span":
+            return False
+        return tag.get("data-lexical-mention") == "true" or tag.has_attr("data-user-id")
+
+    try:
+        soup = BeautifulSoup(html_content, "html.parser")
+        mention_spans = soup.find_all(_is_mention_span)
+        for span in mention_spans:
+            span.replace_with(span.get_text())
+        return soup.get_text().strip()
+    except Exception as e:
+        settings.LOGGER.error(f"Error cleaning comment content: {e}")
+        return html_content
+
+
 class NotificationService:
     """Business logic for document notifications"""
 
@@ -690,51 +749,18 @@ class NotificationService:
         project_tag = project.get_project_tag()
 
         # Generate document URL
-        url_safe_kind_dict = {
-            "concept": "concept",
-            "projectplan": "project",
-            "progressreport": "progress",
-            "studentreport": "student",
-            "projectclosure": "closure",
-        }
-        document_url = f"{settings.SITE_URL}/projects/{project.pk}/{url_safe_kind_dict[document.kind]}"
-
-        # Add ?FY= param for progress/student reports
-        if document.kind == "progressreport":
-            report_detail = document.progress_report_details.first()
-            if report_detail and report_detail.year:
-                year = report_detail.year
-                document_url += f"?FY={year - 1}-{str(year)[2:]}"
-        elif document.kind == "studentreport":
-            report_detail = document.student_report_details.first()
-            if report_detail and report_detail.year:
-                year = report_detail.year
-                document_url += f"?FY={year - 1}-{str(year)[2:]}"
+        document_url = _build_comment_document_url(document, project)
 
         # Clean comment content
-        def clean_comment_content(html_content):
-            from bs4 import BeautifulSoup
-
-            if not html_content:
-                return ""
-
-            try:
-                soup = BeautifulSoup(html_content, "html.parser")
-                mention_spans = soup.find_all("span", {"data-lexical-mention": "true"})
-                for span in mention_spans:
-                    span.replace_with(span.get_text())
-                return soup.get_text().strip()
-            except Exception as e:
-                settings.LOGGER.error(f"Error cleaning comment content: {e}")
-                return html_content
-
-        cleaned_comment = clean_comment_content(comment_content)
+        cleaned_comment = _clean_comment_html(comment_content)
 
         if not mentioned_users:
             return {
                 "message": "No mentioned users found - no emails sent",
                 "recipients": 0,
                 "mentioned_users": 0,
+                "sent": False,
+                "emailed_user_ids": [],
             }
 
         # Process mentioned users
@@ -758,6 +784,7 @@ class NotificationService:
         # Send emails to all valid mentioned users
         processed_users = set()
         emails_sent = 0
+        emailed_user_ids = []
 
         for recipient in recipients_to_notify:
             user_id = recipient.get("id")
@@ -799,6 +826,7 @@ class NotificationService:
                     html_content=template_content,
                 )
                 emails_sent += 1
+                emailed_user_ids.append(user_id)
                 settings.LOGGER.info(f"Sent mention notification to {user_name}")
             except Exception as e:
                 settings.LOGGER.error(f"Comment Notification Email Error: {e}")
@@ -807,7 +835,120 @@ class NotificationService:
             "message": f"Mention notifications sent to {emails_sent} users",
             "recipients": len(recipients_to_notify),
             "mentioned_users": len(mentioned_users),
+            "sent": emails_sent > 0,
+            "emailed_user_ids": emailed_user_ids,
         }
+
+    @staticmethod
+    def notify_comment_reply(
+        document_id,
+        project_id,
+        replier_data,
+        parent_author,
+        comment_content,
+    ):
+        """
+        Email the author of a parent comment when someone replies to it.
+
+        Sent independently of @mentions. The recipient only receives this email
+        when they are an active DBCA staff member with a @dbca.wa.gov.au address.
+
+        Args:
+            document_id: PK of the ProjectDocument.
+            project_id: PK of the Project.
+            replier_data: Dict with the replier's info (name).
+            parent_author: Dict with the parent comment author's id, name, email.
+            comment_content: Raw HTML content of the reply.
+
+        Returns:
+            dict with message and sent (bool).
+        """
+        parent_author_email = parent_author.get("email")
+        parent_author_id = parent_author.get("id")
+        recipient_name = parent_author.get("name")
+        replier_name = replier_data.get("name")
+
+        # Eligibility: internal, active, staff recipients only
+        if not parent_author_email or not parent_author_email.endswith(
+            "@dbca.wa.gov.au"
+        ):
+            settings.LOGGER.info(
+                "Reply notification skipped - parent author is not a DBCA recipient"
+            )
+            return {
+                "message": "Parent author is not an eligible recipient - no email sent",
+                "sent": False,
+            }
+
+        try:
+            recipient = User.objects.get(pk=parent_author_id)
+        except User.DoesNotExist:
+            settings.LOGGER.info(
+                f"Reply notification skipped - parent author {parent_author_id} not found"
+            )
+            return {
+                "message": "Parent author not found - no email sent",
+                "sent": False,
+            }
+
+        if not recipient.is_active or not recipient.is_staff:
+            settings.LOGGER.info(
+                "Reply notification skipped - parent author is inactive or external"
+            )
+            return {
+                "message": "Parent author is inactive or external - no email sent",
+                "sent": False,
+            }
+
+        # Fetch document and project
+        document = ProjectDocument.objects.get(pk=document_id)
+        project = Project.objects.get(pk=project_id)
+        project_tag = project.get_project_tag()
+
+        document_url = _build_comment_document_url(document, project)
+        cleaned_comment = _clean_comment_html(comment_content)
+
+        document_kind_string_readable = ProjectDocument.CategoryKindChoices(
+            document.kind
+        ).label
+
+        email_subject = (
+            f"SPMS: {replier_name} replied to your comment on "
+            f"{document_kind_string_readable} ({project_tag})"
+        )
+
+        template_props = {
+            "recipient_name": recipient_name,
+            "replier_name": replier_name,
+            "document_type_title": document_kind_string_readable,
+            "project_tag": project_tag,
+            "project_name": strip_tags(project.title),
+            "document_url": document_url,
+            "comment_content": cleaned_comment,
+            "site_url": settings.SITE_URL,
+        }
+
+        try:
+            template_content = render_to_string(
+                "./email_templates/document_comment_reply.html",
+                template_props,
+            )
+            send_email_with_embedded_image(
+                recipient_email=[parent_author_email],
+                subject=email_subject,
+                html_content=template_content,
+            )
+            settings.LOGGER.info(f"Sent reply notification to {recipient_name}")
+            return {
+                "message": "Reply notification sent",
+                "sent": True,
+            }
+        except Exception as e:
+            settings.LOGGER.error(f"Comment Reply Notification Email Error: {e}")
+            return {
+                "message": "Failed to send reply notification",
+                "sent": False,
+            }
 
     @staticmethod
     def notify_new_comment(document, comment, commenter):

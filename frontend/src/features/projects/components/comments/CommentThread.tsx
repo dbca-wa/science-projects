@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ChevronDown, ChevronRight } from "lucide-react";
 import { CommentCard } from "./CommentCard";
 import { Button } from "@/shared/components/ui/button";
@@ -26,9 +26,10 @@ interface CommentThreadProps {
 /**
  * CommentThread Component
  *
- * Displays a parent comment with collapsible nested replies.
+ * Displays a top-level comment with its collapsible replies.
  * Shows reply count badge and toggle button for expanding/collapsing replies.
- * Visually indents nested replies (max 3 levels).
+ * Replies are flattened to a single visual level; a reply that targets another
+ * reply shows a "Replying to {name}" label rather than deeper indentation.
  * Supports highlighting specific comments from anchor links.
  */
 export const CommentThread = ({
@@ -55,6 +56,16 @@ export const CommentThread = ({
 
 	// Initialise expanded state - auto-expand if a reply is highlighted
 	const [isExpanded, setIsExpanded] = useState(hasHighlightedReply || false);
+
+	// Auto-expand when a new reply arrives so the posted reply is visible
+	// without a manual expand
+	const prevReplyCountRef = useRef(comment.reply_count);
+	useEffect(() => {
+		if (comment.reply_count > prevReplyCountRef.current) {
+			setIsExpanded(true);
+		}
+		prevReplyCountRef.current = comment.reply_count;
+	}, [comment.reply_count]);
 
 	return (
 		<div className="space-y-4">
@@ -112,7 +123,11 @@ export const CommentThread = ({
 									onReply={onReply}
 									isEditing={editingCommentId === reply.id}
 									onCancelEdit={onCancelEdit}
-									isReply
+									replyingToName={
+										reply.parent_comment === comment.id
+											? undefined
+											: (reply.parent_author_name ?? undefined)
+									}
 									isHighlighted={highlightedCommentId === reply.id}
 									canComment={canComment}
 									project={project}

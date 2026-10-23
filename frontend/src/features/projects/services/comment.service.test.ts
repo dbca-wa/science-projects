@@ -31,6 +31,9 @@ describe("comment.service", () => {
 			expect(apiClient.get).toHaveBeenCalledWith(
 				expect.stringContaining("100")
 			);
+			expect(apiClient.get).toHaveBeenCalledWith(
+				expect.stringContaining("top_level_only=true")
+			);
 			expect(result).toEqual(mockComments);
 		});
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from "react";
-import { Pencil, Trash2, Reply, Check, X } from "lucide-react";
+import { Pencil, Trash2, Reply, Check, X, CornerDownRight } from "lucide-react";
 import { motion, AnimatePresence } from "framer-motion";
 import { useCurrentUser } from "@/features/auth";
 import {
@@ -59,7 +59,7 @@ interface CommentCardProps {
 	) => Promise<void>;
 	onDelete?: (commentId: number) => void;
 	onReply?: (parentCommentId: number) => void;
-	isReply?: boolean;
+	replyingToName?: string;
 	isHighlighted?: boolean;
 	isEditing?: boolean;
 	onCancelEdit?: () => void;
@@ -83,7 +83,7 @@ export const CommentCard = ({
 	onUpdate,
 	onDelete,
 	onReply,
-	isReply = false,
+	replyingToName,
 	isHighlighted = false,
 	isEditing = false,
 	onCancelEdit,
@@ -335,6 +335,14 @@ export const CommentCard = ({
 										{isEdited && <EditTooltip editedAt={comment.updated_at} />}
 									</div>
 
+									{/* Reply reference line */}
+									{replyingToName && (
+										<div className="flex items-center gap-1 mb-1 text-xs text-muted-foreground">
+											<CornerDownRight className="h-3 w-3" />
+											<span>Replying to {replyingToName}</span>
+										</div>
+									)}
+
 									{/* Comment Content */}
 									<div className="text-sm mb-2">
 										<CommentRichTextDisplay html={comment.text} />
@@ -347,13 +355,24 @@ export const CommentCard = ({
 										{/* Wide cards (≥380px): show inline on hover. Narrow cards (<380px): show button always */}
 										{canComment && !isAuthor && !userHasReaction && (
 											<>
-												{/* Inline picker for wide cards - hidden on narrow, shown on hover */}
-												<div className="hidden @[380px]:group-hover:block">
-													<ReactionPicker
-														onReactionSelect={handleReactionSelect}
-														currentUserReaction={currentUserReaction}
-														forceButtonMode={false}
-													/>
+												{/* Inline picker for wide cards - hidden on narrow, floated on hover.
+												    The relative wrapper collapses to a zero-size box (its only child is
+												    absolutely positioned), so revealing the picker on hover never reflows
+												    the action row. */}
+												<div
+													data-testid="inline-reaction-picker-slot"
+													className="relative hidden @[380px]:block"
+												>
+													<div
+														data-testid="inline-reaction-picker-overlay"
+														className="absolute bottom-full left-0 mb-1 z-20 hidden @[380px]:group-hover:block"
+													>
+														<ReactionPicker
+															onReactionSelect={handleReactionSelect}
+															currentUserReaction={currentUserReaction}
+															forceButtonMode={false}
+														/>
+													</div>
 												</div>
 												{/* Button picker for narrow cards - always visible */}
 												<div className="block @[380px]:hidden">
@@ -367,7 +386,7 @@ export const CommentCard = ({
 										)}
 
 										{/* Reply Button - only show if user can comment */}
-										{canComment && !isReply && onReply && (
+										{canComment && onReply && (
 											<Tooltip>
 												<TooltipTrigger asChild>
 													<Button
