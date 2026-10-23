@@ -110,7 +110,7 @@ const PublicationEntry = ({
 	const html = processPublicationText(publication);
 	return (
 		<div
-			className="text-sm leading-relaxed text-slate-600 [&_a]:text-blue-500 [&_a]:no-underline hover:[&_a]:text-blue-700 hover:[&_a]:underline [&_i]:italic [&_i]:text-slate-500"
+			className="text-sm leading-relaxed text-slate-600 [&_a]:text-blue-500 [&_a]:no-underline hover:[&_a]:text-blue-700 hover:[&_a]:underline [&_i]:italic [&_i]:text-slate-500 [&_a_i]:text-inherit"
 			dangerouslySetInnerHTML={{ __html: html }}
 		/>
 	);
