@@ -5,6 +5,7 @@ import {
 	$createParagraphNode,
 	$createTextNode,
 	type ElementNode,
+	type TextFormatType,
 } from "lexical";
 import { $createListNode, $createListItemNode } from "@lexical/list";
 import { $createMentionNode } from "@/shared/nodes/MentionNode";
@@ -50,15 +51,41 @@ export const PrepopulateHTMLPlugin = ({ html }: PrepopulateHTMLPluginProps) => {
 	return null;
 };
 
+/** Map an inline HTML tag to the Lexical text format it applies, if any. */
+const INLINE_TAG_FORMATS: Record<string, TextFormatType> = {
+	strong: "bold",
+	b: "bold",
+	em: "italic",
+	i: "italic",
+	u: "underline",
+	s: "strikethrough",
+	strike: "strikethrough",
+	del: "strikethrough",
+};
+
 /**
- * Process a DOM node and convert it to Lexical nodes
+ * Process a DOM node and convert it to Lexical nodes.
+ *
+ * @param domNode The DOM node to convert.
+ * @param lexicalParent The Lexical element node to append results to.
+ * @param activeFormats Text formats inherited from ancestor inline tags. This
+ *   is what makes nested formatting (e.g. <strong><em>text</em></strong>) work:
+ *   each inline wrapper adds its format and recurses, so a text node deep in the
+ *   tree receives every format from its ancestors, not just the innermost one.
  */
-function processNode(domNode: Node, lexicalParent: ElementNode) {
+function processNode(
+	domNode: Node,
+	lexicalParent: ElementNode,
+	activeFormats: TextFormatType[] = []
+) {
 	if (domNode.nodeType === Node.TEXT_NODE) {
 		// Text node — preserve spaces between inline elements (e.g. mentions)
 		const text = domNode.textContent || "";
 		if (text) {
 			const textNode = $createTextNode(text);
+			for (const format of activeFormats) {
+				textNode.toggleFormat(format);
+			}
 			lexicalParent.append(textNode);
 		}
 	} else if (domNode.nodeType === Node.ELEMENT_NODE) {
@@ -70,7 +97,7 @@ function processNode(domNode: Node, lexicalParent: ElementNode) {
 				// Paragraph
 				const paragraphNode = $createParagraphNode();
 				element.childNodes.forEach((child) => {
-					processNode(child, paragraphNode);
+					processNode(child, paragraphNode, activeFormats);
 				});
 				lexicalParent.append(paragraphNode);
 				break;
@@ -83,7 +110,7 @@ function processNode(domNode: Node, lexicalParent: ElementNode) {
 					if (child.nodeName.toLowerCase() === "li") {
 						const listItemNode = $createListItemNode();
 						(child as HTMLElement).childNodes.forEach((grandchild) => {
-							processNode(grandchild, listItemNode);
+							processNode(grandchild, listItemNode, activeFormats);
 						});
 						listNode.append(listItemNode);
 					}
@@ -99,7 +126,7 @@ function processNode(domNode: Node, lexicalParent: ElementNode) {
 					if (child.nodeName.toLowerCase() === "li") {
 						const listItemNode = $createListItemNode();
 						(child as HTMLElement).childNodes.forEach((grandchild) => {
-							processNode(grandchild, listItemNode);
+							processNode(grandchild, listItemNode, activeFormats);
 						});
 						listNode.append(listItemNode);
 					}
@@ -123,44 +150,25 @@ function processNode(domNode: Node, lexicalParent: ElementNode) {
 					});
 					lexicalParent.append(mentionNode);
 				} else {
-					// Regular span - process children
+					// Regular span - process children, preserving active formats
 					element.childNodes.forEach((child) => {
-						processNode(child, lexicalParent);
+						processNode(child, lexicalParent, activeFormats);
 					});
 				}
 				break;
 			}
 
-			case "strong":
-			case "b": {
-				// Bold text
-				const textNode = $createTextNode(element.textContent || "");
-				textNode.toggleFormat("bold");
-				lexicalParent.append(textNode);
-				break;
-			}
-
-			case "em":
-			case "i": {
-				// Italic text
-				const textNode = $createTextNode(element.textContent || "");
-				textNode.toggleFormat("italic");
-				lexicalParent.append(textNode);
-				break;
-			}
-
-			case "u": {
-				// Underline text
-				const textNode = $createTextNode(element.textContent || "");
-				textNode.toggleFormat("underline");
-				lexicalParent.append(textNode);
-				break;
-			}
-
 			default: {
-				// Unknown element - process children
+				// Inline formatting tags (strong/b, em/i, u, s) add their format
+				// and recurse so nested combinations accumulate. Unknown tags fall
+				// through here too and simply pass the current formats to children.
+				const tagFormat = INLINE_TAG_FORMATS[tagName];
+				const nextFormats =
+					tagFormat && !activeFormats.includes(tagFormat)
+						? [...activeFormats, tagFormat]
+						: activeFormats;
 				element.childNodes.forEach((child) => {
-					processNode(child, lexicalParent);
+					processNode(child, lexicalParent, nextFormats);
 				});
 				break;
 			}

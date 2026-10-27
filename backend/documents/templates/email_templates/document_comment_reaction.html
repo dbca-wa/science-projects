@@ -1,0 +1,23 @@
+{% load custom_filters %}
+{% include "email_templates/partials/_base_open.html" %}
+{% with email_title="New Reaction to Your Comment" %}
+  {% include "email_templates/partials/_header.html" %}
+{% endwith %}
+
+{% include "email_templates/partials/_greeting.html" %}
+
+<p style="font-size: 14px; line-height: 26px; margin: 16px 0; color: #4b5563;">
+  <strong style="color: #1f2937;">{{ reactor_name }}</strong> reacted with {{ reaction_emoji }} {{ reaction_label }} to your comment on the {{ document_type_title }} for
+  <strong style="color: #1f2937;">&#x27;{% spaceless %}{{ project_name|extract_text_content }}{% endspaceless %}&#x27;</strong> ({{ project_tag }})
+</p>
+
+{% with comment_label="Your comment:" comment_text=comment_content %}
+  {% include "email_templates/partials/_comment_box.html" %}
+{% endwith %}
+
+{% with action_url=document_url action_text="View Document" action_subtext="You can view the comment and reactions by clicking the button above." %}
+  {% include "email_templates/partials/_action_button.html" %}
+{% endwith %}
+
+{% include "email_templates/partials/_footer.html" %}
+{% include "email_templates/partials/_base_close.html" %}

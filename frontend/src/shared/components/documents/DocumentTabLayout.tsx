@@ -102,10 +102,15 @@ export const DocumentTabLayout = ({
 
 			{/* Main content area */}
 			<div className="grid gap-6 2xl:grid-cols-3">
-				{/* Left column: Document content (full width on mobile-XL, 2/3 on 2XL+) */}
-				<div className="min-w-0 2xl:col-span-2">{children}</div>
+				{/* Left column: Document content with comments directly beneath the
+				    rich-text fields (full width on mobile-XL, 2/3 on 2XL+) */}
+				<div className="min-w-0 2xl:col-span-2 space-y-6">
+					{children}
+					{commentsSection}
+				</div>
 
-				{/* Right column: Details, Actions, and Comments (only visible on 2XL+, sticky positioning with scroll) */}
+				{/* Right column: Details and Actions (only visible on 2XL+, sticky
+				    positioning with scroll) */}
 				<div className="hidden 2xl:block">
 					<div className="2xl:sticky 2xl:top-20 2xl:max-h-[calc(100vh-6rem)] 2xl:overflow-y-auto space-y-6">
 						<DocumentDetailsSection
@@ -131,14 +136,9 @@ export const DocumentTabLayout = ({
 							onSetAreas={onSetAreas}
 							onReopenProject={onReopenProject}
 						/>
-						{/* Comments in sidebar on 2XL+ */}
-						{commentsSection}
 					</div>
 				</div>
 			</div>
-
-			{/* Comments at bottom (mobile to XL only) */}
-			<div className="2xl:hidden">{commentsSection}</div>
 		</div>
 	);
 };

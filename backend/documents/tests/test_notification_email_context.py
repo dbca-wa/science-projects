@@ -850,6 +850,104 @@ class TestNotifyCommentReply:
         assert not mock_send.called
 
 
+# ─── Comment Reaction Email Tests ─────────────────────────────────────────────
+
+
+def _make_reaction_comment(document, user, text="A comment"):
+    from communications.models import Comment
+
+    return Comment.objects.create(
+        user=user,
+        document=document,
+        text=text,
+        ip_address="127.0.0.1",
+        is_public=True,
+        is_removed=False,
+    )
+
+
+@pytest.mark.django_db
+class TestNotifyCommentReaction:
+    """Test notify_comment_reaction."""
+
+    @patch("documents.services.notification_service.send_email_with_embedded_image")
+    def test_eligible_author_receives_reaction_email(self, mock_send):
+        author = UserFactory(
+            first_name="Pat",
+            last_name="Author",
+            email="pat.author@dbca.wa.gov.au",
+            is_active=True,
+            is_staff=True,
+        )
+        reactor = UserFactory(first_name="Robin", last_name="Reactor")
+        concept_plan = ConceptPlanFactory()
+        comment = _make_reaction_comment(concept_plan.document, author)
+
+        result = NotificationService.notify_comment_reaction(
+            comment_id=comment.pk,
+            reactor_data={"id": reactor.pk, "name": "Robin Reactor"},
+            reaction_type="heart",
+        )
+
+        assert result["sent"] is True
+        assert mock_send.call_count == 1
+        assert mock_send.call_args[1]["recipient_email"] == [
+            "pat.author@dbca.wa.gov.au"
+        ]
+        html = mock_send.call_args[1]["html_content"]
+        assert "Robin Reactor" in html
+        # Reaction label for "heart"
+        assert "a heart" in html
+
+    @patch("documents.services.notification_service.send_email_with_embedded_image")
+    def test_self_reaction_sends_no_email(self, mock_send):
+        author = UserFactory(
+            email="pat.author@dbca.wa.gov.au", is_active=True, is_staff=True
+        )
+        concept_plan = ConceptPlanFactory()
+        comment = _make_reaction_comment(concept_plan.document, author)
+
+        result = NotificationService.notify_comment_reaction(
+            comment_id=comment.pk,
+            reactor_data={"id": author.pk, "name": "Pat Author"},
+            reaction_type="heart",
+        )
+
+        assert result["sent"] is False
+        assert not mock_send.called
+
+    @patch("documents.services.notification_service.send_email_with_embedded_image")
+    def test_ineligible_author_receives_no_reaction_email(self, mock_send):
+        author = UserFactory(
+            email="sam.external@gmail.com", is_active=True, is_staff=True
+        )
+        reactor = UserFactory()
+        concept_plan = ConceptPlanFactory()
+        comment = _make_reaction_comment(concept_plan.document, author)
+
+        result = NotificationService.notify_comment_reaction(
+            comment_id=comment.pk,
+            reactor_data={"id": reactor.pk, "name": "Robin Reactor"},
+            reaction_type="thumbup",
+        )
+
+        assert result["sent"] is False
+        assert not mock_send.called
+
+    @patch("documents.services.notification_service.send_email_with_embedded_image")
+    def test_missing_comment_sends_no_email(self, mock_send):
+        reactor = UserFactory()
+
+        result = NotificationService.notify_comment_reaction(
+            comment_id=999999,
+            reactor_data={"id": reactor.pk, "name": "Robin Reactor"},
+            reaction_type="heart",
+        )
+
+        assert result["sent"] is False
+        assert not mock_send.called
+
+
 # ─── Batch Approved Email Tests ───────────────────────────────────────────────
 
 

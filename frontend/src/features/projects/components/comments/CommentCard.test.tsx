@@ -16,6 +16,15 @@ vi.mock("@/features/auth", () => ({
 	}),
 }));
 
+// Mock the reactions hooks. CommentCard fetches reactions via useReactions
+// (a separate query), independent of comment.reactions. Tests set
+// mockReactions to control what the card sees.
+let mockReactions: unknown[] = [];
+vi.mock("@/features/projects/hooks/useReactions", () => ({
+	useReactions: () => ({ data: mockReactions }),
+	useToggleReaction: () => ({ mutate: vi.fn(), isPending: false }),
+}));
+
 const createMockComment = (overrides?: Partial<IComment>): IComment => ({
 	id: 1,
 	user: {
@@ -185,14 +194,15 @@ describe("CommentCard - Replies", () => {
 describe("CommentCard - Inline reaction picker overlay", () => {
 	beforeEach(() => {
 		vi.clearAllMocks();
+		mockReactions = [];
 	});
 
-	// The inline (wide-card) reaction picker is floated out of flow so revealing it
-	// on hover does not reflow the action row. These assertions cover the static
-	// positioning classes; the live 'no sibling movement on hover' confirmation is a
-	// manual/visual check pending a browser (hover + @container queries are not
-	// exercised by jsdom).
-	it("floats the inline picker as an out-of-flow overlay above and left-anchored", () => {
+	// The inline (wide-card) reaction picker is floated out of flow in the card's
+	// top-right corner — the same spot the reaction badge occupies — so the picker
+	// and an existing reaction share one end point. These assertions cover the
+	// static positioning classes; the hover reveal is a manual/visual check (hover
+	// + @container queries are not exercised by jsdom).
+	it("floats the inline picker in the top-right corner, matching the reaction badge position", () => {
 		const comment = createMockComment({ id: 20 });
 		const { container } = renderWithProviders(
 			<CommentCard
@@ -207,13 +217,27 @@ describe("CommentCard - Inline reaction picker overlay", () => {
 			'[data-testid="inline-reaction-picker-overlay"]'
 		);
 		expect(overlay).toBeInTheDocument();
-		// Out of flow, floated above the zero-height slot, anchored to the left.
+		// Out of flow, pinned to the top-right corner (same as the reaction badge).
 		expect(overlay).toHaveClass("absolute");
-		expect(overlay).toHaveClass("bottom-full");
-		expect(overlay).toHaveClass("left-0");
+		expect(overlay).toHaveClass("top-4");
+		expect(overlay).toHaveClass("right-4");
 	});
 
-	it("keeps the picker slot as a zero-size relative anchor that does not reflow the row", () => {
+	it("does not render the hover picker when the comment already has reactions", () => {
+		mockReactions = [
+			{
+				id: 1,
+				reaction: "heart",
+				created_at: new Date().toISOString(),
+				user: {
+					id: 999,
+					display_first_name: "Other",
+					display_last_name: "User",
+					email: "other.user@example.com",
+					image: "",
+				},
+			},
+		];
 		const comment = createMockComment({ id: 21 });
 		const { container } = renderWithProviders(
 			<CommentCard
@@ -224,15 +248,11 @@ describe("CommentCard - Inline reaction picker overlay", () => {
 			/>
 		);
 
-		const slot = container.querySelector(
-			'[data-testid="inline-reaction-picker-slot"]'
+		// The badge occupies the corner, so the hover picker is suppressed to avoid
+		// overlapping it.
+		const overlay = container.querySelector(
+			'[data-testid="inline-reaction-picker-overlay"]'
 		);
-		expect(slot).toBeInTheDocument();
-		// Relative anchor whose only child is absolutely positioned, so it contributes
-		// no layout size to the action row.
-		expect(slot).toHaveClass("relative");
-		expect(slot?.children).toHaveLength(1);
-		const onlyChild = slot?.children[0];
-		expect(onlyChild).toHaveClass("absolute");
+		expect(overlay).not.toBeInTheDocument();
 	});
 });

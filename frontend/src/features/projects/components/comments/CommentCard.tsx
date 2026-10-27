@@ -237,7 +237,7 @@ export const CommentCard = ({
 				<div
 					id={anchorId}
 					ref={cardRef}
-					className={`@container mb-4 p-4 rounded-3xl bg-background border transition-all duration-500 relative ${
+					className={`@container group mb-4 p-4 rounded-3xl bg-background border transition-all duration-500 relative ${
 						isHighlighted
 							? "ring-2 ring-blue-500 bg-blue-50 dark:bg-blue-950/20"
 							: ""
@@ -254,6 +254,29 @@ export const CommentCard = ({
 							/>
 						</div>
 					)}
+
+					{/* Inline reaction picker — appears on card hover in the SAME
+					    top-right corner as the reaction badge, so the picker and an
+					    existing reaction share one end point. Only shown on wide
+					    cards when there are no reactions yet (otherwise the badge
+					    occupies this spot); narrow cards use the button picker in
+					    the action row below. */}
+					{canComment &&
+						!isAuthor &&
+						!userHasReaction &&
+						reactions.length === 0 &&
+						!isEditing && (
+							<div
+								data-testid="inline-reaction-picker-overlay"
+								className="absolute top-4 right-4 z-20 hidden @[380px]:group-hover:block rounded-lg border bg-popover p-1 shadow-md"
+							>
+								<ReactionPicker
+									onReactionSelect={handleReactionSelect}
+									currentUserReaction={currentUserReaction}
+									forceButtonMode={false}
+								/>
+							</div>
+						)}
 
 					<AnimatePresence mode="wait">
 						{isEditing ? (
@@ -350,39 +373,19 @@ export const CommentCard = ({
 
 									{/* Action Buttons - Bottom with ReactionPicker next to Reply */}
 									<div className="flex justify-end gap-2 items-center">
-										{/* ReactionPicker - only show if user can comment */}
-										{/* Don't show reaction picker for your own comments or if you already have a reaction */}
-										{/* Wide cards (≥380px): show inline on hover. Narrow cards (<380px): show button always */}
+										{/* Narrow cards (<380px): always-visible button picker in the
+										    action row. Wide cards use the hover picker anchored to the
+										    top-right corner (rendered above, matching the reaction
+										    badge's position). Hidden for your own comments or when you
+										    already have a reaction. */}
 										{canComment && !isAuthor && !userHasReaction && (
-											<>
-												{/* Inline picker for wide cards - hidden on narrow, floated on hover.
-												    The relative wrapper collapses to a zero-size box (its only child is
-												    absolutely positioned), so revealing the picker on hover never reflows
-												    the action row. */}
-												<div
-													data-testid="inline-reaction-picker-slot"
-													className="relative hidden @[380px]:block"
-												>
-													<div
-														data-testid="inline-reaction-picker-overlay"
-														className="absolute bottom-full left-0 mb-1 z-20 hidden @[380px]:group-hover:block"
-													>
-														<ReactionPicker
-															onReactionSelect={handleReactionSelect}
-															currentUserReaction={currentUserReaction}
-															forceButtonMode={false}
-														/>
-													</div>
-												</div>
-												{/* Button picker for narrow cards - always visible */}
-												<div className="block @[380px]:hidden">
-													<ReactionPicker
-														onReactionSelect={handleReactionSelect}
-														currentUserReaction={currentUserReaction}
-														forceButtonMode={true}
-													/>
-												</div>
-											</>
+											<div className="block @[380px]:hidden">
+												<ReactionPicker
+													onReactionSelect={handleReactionSelect}
+													currentUserReaction={currentUserReaction}
+													forceButtonMode={true}
+												/>
+											</div>
 										)}
 
 										{/* Reply Button - only show if user can comment */}
