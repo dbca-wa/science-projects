@@ -38,6 +38,36 @@ from communications.utils.comment_permissions import (
 
 logger = logging.getLogger(__name__)
 
+# Maps a document's kind to its URL-safe path segment, matching the frontend
+# routes (and the comment-email document links).
+_DOCUMENT_KIND_URL_SEGMENT = {
+    "concept": "concept",
+    "projectplan": "project",
+    "progressreport": "progress",
+    "studentreport": "student",
+    "projectclosure": "closure",
+}
+
+
+def _build_document_page_link(document_id):
+    """Build the full {SITE_URL}/projects/{project_id}/{document_type} page URL.
+
+    Used in logs so it's clear which document page a request relates to, as a
+    directly clickable link. Returns None when the document can't be resolved
+    (e.g. no document_id on a list-all request), so the caller can log a
+    sensible fallback.
+    """
+    if not document_id:
+        return None
+    try:
+        from documents.models import ProjectDocument
+
+        document = ProjectDocument.objects.select_related("project").get(pk=document_id)
+        segment = _DOCUMENT_KIND_URL_SEGMENT.get(document.kind, document.kind)
+        return f"{settings.SITE_URL}/projects/{document.project.pk}/{segment}"
+    except Exception:
+        return None
+
 
 class ChatRooms(APIView):
     """List and create chat rooms"""
@@ -177,6 +207,17 @@ class Comments(APIView):
             top_level_only=top_level_only,
         )
         serializer = CommentSerializer(comments, many=True)
+
+        # Log each list fetch so comment polling is observable server-side.
+        # The frontend polls this endpoint on an interval, so these entries
+        # confirm polls are arriving (and how many comments were returned).
+        # Include the document page link so it's obvious what was being viewed.
+        page_link = _build_document_page_link(document_id)
+        settings.LOGGER.info(
+            f"{request.user} fetched comments "
+            f"(count={len(serializer.data)}, page={page_link})"
+        )
+
         return Response(serializer.data, status=HTTP_200_OK)
 
     def post(self, request):
@@ -376,6 +417,30 @@ class Reactions(APIView):
 
             if was_deleted:
                 return Response(status=HTTP_204_NO_CONTENT)
+
+            # Notify the comment's author that someone reacted. Best-effort:
+            # never block or fail the reaction if the email can't be sent.
+            try:
+                from documents.services.notification_service import (
+                    NotificationService,
+                )
+
+                NotificationService.notify_comment_reaction(
+                    comment_id=comment_id,
+                    reactor_data={
+                        "id": user_id,
+                        "name": (
+                            f"{request.user.display_first_name} "
+                            f"{request.user.display_last_name}"
+                        ),
+                    },
+                    reaction_type=reaction_type,
+                )
+            except Exception as e:
+                logger.error(
+                    f"Failed to send reaction notification for comment "
+                    f"{comment_id}: {e}"
+                )
 
             serializer = TinyReactionSerializer(reaction)
             return Response(serializer.data, status=HTTP_201_CREATED)

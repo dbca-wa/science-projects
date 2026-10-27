@@ -950,6 +950,135 @@ class NotificationService:
                 "sent": False,
             }
 
+    # Human-readable label + emoji for each reaction, used in the email copy.
+    _REACTION_DISPLAY = {
+        "thumbup": ("a thumbs up", "\U0001f44d"),
+        "heart": ("a heart", "\u2764\ufe0f"),
+        "funny": ("a laugh", "\U0001f604"),
+        "confused": ("a confused face", "\U0001f615"),
+        "surprised": ("a surprised face", "\U0001f62e"),
+    }
+
+    @staticmethod
+    def notify_comment_reaction(
+        comment_id,
+        reactor_data,
+        reaction_type,
+    ):
+        """
+        Email the author of a comment when someone reacts to it.
+
+        Sent when a reaction is added (not removed). The recipient only receives
+        this email when they are an active DBCA staff member with a
+        @dbca.wa.gov.au address, and never for reacting to their own comment
+        (the caller is expected to skip self-reactions, but this is defensive).
+
+        Args:
+            comment_id: PK of the Comment that was reacted to.
+            reactor_data: Dict with the reactor's id and name.
+            reaction_type: Reaction value, e.g. "heart", "thumbup".
+
+        Returns:
+            dict with message and sent (bool).
+        """
+        from communications.models import Comment
+
+        try:
+            comment = Comment.objects.select_related(
+                "user", "document", "document__project"
+            ).get(pk=comment_id)
+        except Comment.DoesNotExist:
+            settings.LOGGER.info(
+                f"Reaction notification skipped - comment {comment_id} not found"
+            )
+            return {"message": "Comment not found - no email sent", "sent": False}
+
+        author = comment.user
+        reactor_id = reactor_data.get("id")
+        reactor_name = reactor_data.get("name")
+
+        if author is None:
+            settings.LOGGER.info(
+                "Reaction notification skipped - comment has no author"
+            )
+            return {"message": "Comment has no author - no email sent", "sent": False}
+
+        if comment.is_removed:
+            settings.LOGGER.info("Reaction notification skipped - comment removed")
+            return {"message": "Comment removed - no email sent", "sent": False}
+
+        if author.pk == reactor_id:
+            settings.LOGGER.info("Reaction notification skipped - self-reaction")
+            return {"message": "Self-reaction - no email sent", "sent": False}
+
+        # Eligibility: internal, active, staff recipients only
+        if (
+            not author.email
+            or not author.email.endswith("@dbca.wa.gov.au")
+            or not author.is_active
+            or not author.is_staff
+        ):
+            settings.LOGGER.info(
+                "Reaction notification skipped - author is not an eligible DBCA recipient"
+            )
+            return {
+                "message": "Author is not an eligible recipient - no email sent",
+                "sent": False,
+            }
+
+        document = comment.document
+        project = document.project
+        project_tag = project.get_project_tag()
+        document_url = _build_comment_document_url(document, project)
+        cleaned_comment = _clean_comment_html(comment.text)
+
+        document_kind_string_readable = ProjectDocument.CategoryKindChoices(
+            document.kind
+        ).label
+
+        reaction_label, reaction_emoji = NotificationService._REACTION_DISPLAY.get(
+            reaction_type, ("a reaction", "")
+        )
+
+        email_subject = (
+            f"SPMS: {reactor_name} reacted to your comment on "
+            f"{document_kind_string_readable} ({project_tag})"
+        )
+
+        template_props = {
+            "recipient_name": author.get_full_name(),
+            "reactor_name": reactor_name,
+            "reaction_label": reaction_label,
+            "reaction_emoji": reaction_emoji,
+            "document_type_title": document_kind_string_readable,
+            "project_tag": project_tag,
+            "project_name": strip_tags(project.title),
+            "document_url": document_url,
+            "comment_content": cleaned_comment,
+            "site_url": settings.SITE_URL,
+        }
+
+        try:
+            template_content = render_to_string(
+                "./email_templates/document_comment_reaction.html",
+                template_props,
+            )
+            send_email_with_embedded_image(
+                recipient_email=[author.email],
+                subject=email_subject,
+                html_content=template_content,
+            )
+            settings.LOGGER.info(
+                f"Sent reaction notification to {author.get_full_name()}"
+            )
+            return {"message": "Reaction notification sent", "sent": True}
+        except Exception as e:
+            settings.LOGGER.error(f"Comment Reaction Notification Email Error: {e}")
+            return {
+                "message": "Failed to send reaction notification",
+                "sent": False,
+            }
+
     @staticmethod
     def notify_new_comment(document, comment, commenter):
         """

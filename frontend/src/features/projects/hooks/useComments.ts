@@ -11,7 +11,17 @@ import type {
 	ICommentCreate,
 	ICommentUpdate,
 } from "@/shared/types/comment.types";
-import { ENABLE_COMMENT_POLLING } from "@/shared/constants/features";
+import {
+	ENABLE_COMMENT_POLLING,
+	COMMENT_POLLING_INTERVAL_MS,
+} from "@/shared/constants/features";
+import { logger } from "@/shared/services/logger.service";
+
+/**
+ * Document IDs that have been fetched at least once this session. Used only to
+ * label the poll log as "loaded" vs "poll" — has no effect on fetching.
+ */
+const fetchedDocumentIds = new Set<number>();
 
 /**
  * Query keys for comments
@@ -26,10 +36,12 @@ export const commentKeys = {
 
 /**
  * Hook for fetching comments for a document
- * - Configured with 30 second stale time (dynamic data)
  * - Only enabled when documentId is provided
- * - Automatically refetches in background when data becomes stale
- * - Polling can be enabled/disabled via ENABLE_COMMENT_POLLING constant
+ * - When polling is enabled, refetches in the background so comments posted by
+ *   other users flow in without a hard refresh. Only new comments mount (and
+ *   fade in); unchanged ones are preserved via structural sharing.
+ * - Also refetches on window focus and reconnect, so returning to the tab
+ *   shows the latest comments immediately.
  *
  * @param documentId - Document ID to fetch comments for
  * @returns TanStack Query result with comments array
@@ -38,12 +50,37 @@ export const useComments = (documentId: number | undefined) => {
 	return useQuery({
 		queryKey: commentKeys.list(documentId as number),
 		queryFn: async () => {
+			// Distinguish the initial load from background polls so the dev/staging
+			// console clearly shows polling is happening. Suppressed in production
+			// (logger.debug is a no-op on the prod domain).
+			const isInitialLoad = !fetchedDocumentIds.has(documentId as number);
+			fetchedDocumentIds.add(documentId as number);
+
 			const result = await getComments(documentId as number);
+
+			if (ENABLE_COMMENT_POLLING) {
+				logger.debug(
+					isInitialLoad
+						? `Comments loaded for document ${documentId} (${result.length})`
+						: `Comments poll for document ${documentId} (${result.length}) — every ${COMMENT_POLLING_INTERVAL_MS / 1000}s`,
+					{ src: "useComments.ts", documentId, count: result.length }
+				);
+			}
+
 			return result;
 		},
-		staleTime: 30_000, // 30 seconds for dynamic data
+		// Keep stale time below the poll interval so background polls actually
+		// fetch rather than serving cache.
+		staleTime: ENABLE_COMMENT_POLLING ? COMMENT_POLLING_INTERVAL_MS : 30_000,
 		enabled: !!documentId, // Only fetch if documentId is provided
-		refetchInterval: ENABLE_COMMENT_POLLING ? 30_000 : false, // Poll every 30 seconds if enabled
+		refetchInterval: ENABLE_COMMENT_POLLING
+			? COMMENT_POLLING_INTERVAL_MS
+			: false,
+		// Pause polling while the tab is hidden to avoid needless requests; the
+		// focus refetch below catches up the moment the user returns.
+		refetchIntervalInBackground: false,
+		refetchOnWindowFocus: ENABLE_COMMENT_POLLING,
+		refetchOnReconnect: ENABLE_COMMENT_POLLING,
 	});
 };
 

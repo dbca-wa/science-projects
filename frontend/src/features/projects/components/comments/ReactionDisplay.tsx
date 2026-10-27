@@ -173,6 +173,14 @@ export const ReactionDisplay = ({
 	// Calculate total reaction count for compact button
 	const totalCount = groupedReactions.reduce((sum, g) => sum + g.count, 0);
 
+	// Icon for the compact (narrow) button: when a single reaction type is
+	// present, show that reaction's emoji so a lone heart reads as ❤️, not a
+	// generic 😊. Only fall back to the generic face when types are mixed.
+	const compactIcon =
+		groupedReactions.length === 1
+			? REACTION_EMOJIS[groupedReactions[0].type]
+			: "😊";
+
 	// Animation variants (disabled if reduced motion or not interactive)
 	const animationProps =
 		shouldReduceMotion || !canInteract
@@ -258,7 +266,7 @@ export const ReactionDisplay = ({
 									aria-label={`${totalCount} ${totalCount === 1 ? "reaction" : "reactions"}`}
 								>
 									<span className="text-sm" aria-hidden="true">
-										😊
+										{compactIcon}
 									</span>
 									<span>{totalCount}</span>
 								</button>
