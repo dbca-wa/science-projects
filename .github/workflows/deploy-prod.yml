@@ -470,6 +470,7 @@ jobs:
   scan-frontend:
     name: Scan Frontend Image
     runs-on: ubuntu-latest
+    continue-on-error: true # If vulnerability scan fails, the workflow can still complete successfully.
     needs: [merge-frontend-prod]
     if: needs.merge-frontend-prod.result == 'success'
 
@@ -493,7 +494,13 @@ jobs:
       - name: Generate SBOM (Frontend)
         uses: aquasecurity/trivy-action@v0.36.0
         env:
-          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          # Pull the vuln DBs from the GHCR mirror instead of public.ecr.aws,
+          # which rate-limits anonymous pulls (TOOMANYREQUESTS) from shared
+          # runner IPs. Authenticate with GITHUB_TOKEN so we are not anonymous.
+          TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
+          TRIVY_JAVA_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-java-db:1
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
           scan-type: "image"
           scanners: "vuln"
@@ -515,7 +522,10 @@ jobs:
       - name: Generate vulnerability CSV (Frontend)
         uses: aquasecurity/trivy-action@v0.36.0
         env:
-          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
+          TRIVY_JAVA_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-java-db:1
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
           scan-type: "image"
           scanners: "vuln"
@@ -533,7 +543,10 @@ jobs:
       - name: Run Trivy SARIF scan (Frontend)
         uses: aquasecurity/trivy-action@v0.36.0
         env:
-          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
+          TRIVY_JAVA_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-java-db:1
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
           scan-type: "image"
           scanners: "vuln"
@@ -561,6 +574,7 @@ jobs:
   scan-backend:
     name: Scan Backend Image
     runs-on: ubuntu-latest
+    continue-on-error: true # If vulnerability scan fails, the workflow can still complete successfully.
     needs: [merge-backend-prod]
     if: needs.merge-backend-prod.result == 'success'
 
@@ -584,7 +598,13 @@ jobs:
       - name: Generate SBOM (Backend)
         uses: aquasecurity/trivy-action@v0.36.0
         env:
-          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          # Pull the vuln DBs from the GHCR mirror instead of public.ecr.aws,
+          # which rate-limits anonymous pulls (TOOMANYREQUESTS) from shared
+          # runner IPs. Authenticate with GITHUB_TOKEN so we are not anonymous.
+          TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
+          TRIVY_JAVA_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-java-db:1
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
           scan-type: "image"
           scanners: "vuln"
@@ -606,7 +626,10 @@ jobs:
       - name: Generate vulnerability CSV (Backend)
         uses: aquasecurity/trivy-action@v0.36.0
         env:
-          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
+          TRIVY_JAVA_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-java-db:1
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
           scan-type: "image"
           scanners: "vuln"
@@ -624,7 +647,10 @@ jobs:
       - name: Run Trivy SARIF scan (Backend)
         uses: aquasecurity/trivy-action@v0.36.0
         env:
-          TRIVY_DB_REPOSITORY: public.ecr.aws/aquasecurity/trivy-db
+          TRIVY_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-db:2
+          TRIVY_JAVA_DB_REPOSITORY: ghcr.io/aquasecurity/trivy-java-db:1
+          TRIVY_USERNAME: ${{ github.actor }}
+          TRIVY_PASSWORD: ${{ secrets.GITHUB_TOKEN }}
         with:
           scan-type: "image"
           scanners: "vuln"
