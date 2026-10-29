@@ -1,9 +1,67 @@
-import { describe, it, expect, vi, beforeEach } from "vitest";
+import { describe, it, expect, vi, beforeEach, afterEach } from "vitest";
+import {
+	$createParagraphNode,
+	$createTextNode,
+	$getRoot,
+	createEditor,
+	type LexicalEditor,
+} from "lexical";
+import {
+	$isListNode,
+	ListItemNode,
+	ListNode,
+	registerList,
+} from "@lexical/list";
 import { EditorStore } from "./editor.store";
 
 vi.mock("@/shared/services/logger.service", () => ({
 	logger: { info: vi.fn(), warn: vi.fn(), debug: vi.fn(), error: vi.fn() },
 }));
+
+/**
+ * A real Lexical editor with list support, mounted on a content editable and
+ * holding one paragraph with the caret at its end.
+ */
+function createListEditor(text: string): {
+	editor: LexicalEditor;
+	cleanup: () => void;
+} {
+	const editor = createEditor({
+		namespace: `test-${text}`,
+		nodes: [ListNode, ListItemNode],
+		onError: (error) => {
+			throw error;
+		},
+	});
+	const root = document.createElement("div");
+	root.contentEditable = "true";
+	document.body.appendChild(root);
+	editor.setRootElement(root);
+	const unregisterList = registerList(editor);
+	editor.update(
+		() => {
+			const paragraph = $createParagraphNode();
+			paragraph.append($createTextNode(text));
+			$getRoot().clear().append(paragraph);
+			paragraph.selectEnd();
+		},
+		{ discrete: true }
+	);
+	return {
+		editor,
+		cleanup: () => {
+			unregisterList();
+			editor.setRootElement(null);
+			root.remove();
+		},
+	};
+}
+
+/** Lexical commits command updates in a microtask */
+const flushUpdates = () => new Promise((resolve) => setTimeout(resolve, 0));
+
+const isFirstBlockList = (editor: LexicalEditor): boolean =>
+	editor.getEditorState().read(() => $isListNode($getRoot().getFirstChild()));
 
 describe("EditorStore", () => {
 	let store: EditorStore;
@@ -83,5 +141,70 @@ describe("EditorStore", () => {
 	it("shouldBlockNavigation should return false for same path", () => {
 		store.openEditor();
 		expect(store.shouldBlockNavigation("/a", "/a")).toBe(false);
+	});
+
+	describe("toolbar command routing", () => {
+		let first: ReturnType<typeof createListEditor>;
+		let second: ReturnType<typeof createListEditor>;
+
+		beforeEach(() => {
+			first = createListEditor("First editor");
+			second = createListEditor("Second editor");
+		});
+
+		afterEach(() => {
+			first.cleanup();
+			second.cleanup();
+		});
+
+		it("applies the list command to the active editor only", async () => {
+			store.initLexicalEditor(first.editor, "first");
+			store.toggleList();
+			await flushUpdates();
+
+			expect(isFirstBlockList(first.editor)).toBe(true);
+			expect(isFirstBlockList(second.editor)).toBe(false);
+		});
+
+		it("switches commands to an editor once it is activated", async () => {
+			store.initLexicalEditor(first.editor, "first");
+			store.initLexicalEditor(second.editor, "second");
+			store.toggleList();
+			await flushUpdates();
+
+			expect(store.activeEditorKey).toBe("second");
+			expect(isFirstBlockList(second.editor)).toBe(true);
+			expect(isFirstBlockList(first.editor)).toBe(false);
+		});
+
+		it("releases an unmounted editor so commands are not sent to it", async () => {
+			store.initLexicalEditor(first.editor, "first");
+			store.releaseLexicalEditor(first.editor);
+			store.toggleList();
+			await flushUpdates();
+
+			expect(store.activeEditorKey).toBeNull();
+			expect(isFirstBlockList(first.editor)).toBe(false);
+		});
+
+		it("ignores a release from an editor that is not active", () => {
+			store.initLexicalEditor(first.editor, "first");
+			store.releaseLexicalEditor(second.editor);
+
+			expect(store.activeEditorKey).toBe("first");
+		});
+
+		it("clears toolbar state when the active editor is released", async () => {
+			store.initLexicalEditor(first.editor, "first");
+			store.toggleList();
+			await flushUpdates();
+			expect(store.state.isList).toBe(true);
+
+			store.releaseLexicalEditor(first.editor);
+
+			expect(store.state.isList).toBe(false);
+			expect(store.state.listType).toBeNull();
+			expect(store.state.canUndo).toBe(false);
+		});
 	});
 });

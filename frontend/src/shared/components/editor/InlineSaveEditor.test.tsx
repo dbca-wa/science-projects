@@ -30,6 +30,7 @@ vi.mock("@/app/stores/InlineEditStore", () => ({
 		registerEditor: vi.fn(),
 		unregisterEditor: vi.fn(),
 		updateCurrentContent: vi.fn(),
+		reportHasChanges: vi.fn(),
 	},
 }));
 

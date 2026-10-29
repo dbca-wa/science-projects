@@ -45,6 +45,8 @@ import type { ToolbarMode } from "@/shared/types/editor.types";
 interface FloatingLinkToolbarProps {
 	showLinks: boolean;
 	toolbar?: ToolbarMode;
+	/** Key of the editor this toolbar belongs to, shared with the main toolbar */
+	editorKey?: string;
 }
 
 const TOOLBAR_HEIGHT = 36;
@@ -53,6 +55,7 @@ const TOOLBAR_GAP = 10;
 export const FloatingLinkToolbar = ({
 	showLinks,
 	toolbar = "full",
+	editorKey,
 }: FloatingLinkToolbarProps) => {
 	const [editor] = useLexicalComposerContext();
 	const linkEditor = useLinkEditor();
@@ -392,7 +395,12 @@ export const FloatingLinkToolbar = ({
 			}}
 			role="toolbar"
 			aria-label="Floating formatting toolbar"
-			onMouseDown={(e) => e.preventDefault()}
+			onMouseDown={(e) => {
+				e.preventDefault();
+				// List, indent and alignment go through the shared store's active editor,
+				// so make sure that is this editor before the click handler runs
+				editorStore.initLexicalEditor(editor, editorKey);
+			}}
 		>
 			{showBold && (
 				<button

@@ -65,6 +65,22 @@ describe("WordCounter", () => {
 			render(<WordCounter content="<p>Hello world</p>" limit={10} />);
 			expect(screen.queryByText(/exceeds limit/)).not.toBeInTheDocument();
 		});
+
+		it("should flag a suggested limit as advice rather than an error", () => {
+			render(
+				<WordCounter
+					content="<p>Hello world test</p>"
+					limit={2}
+					limitCanBePassed
+				/>
+			);
+			expect(
+				screen.getByText(/\(over suggested limit by 1\)/)
+			).toBeInTheDocument();
+			expect(screen.queryByText(/exceeds limit/)).not.toBeInTheDocument();
+			expect(screen.queryByRole("alert")).not.toBeInTheDocument();
+			expect(screen.getByText(/3 \/ 2 words/)).not.toHaveClass("text-red-600");
+		});
 	});
 
 	describe("Accessibility", () => {

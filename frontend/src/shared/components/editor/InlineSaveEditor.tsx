@@ -15,7 +15,10 @@ import { inlineEditStore } from "@/app/stores/InlineEditStore";
 import { useUpdateContent } from "@/shared/hooks/queries/useUpdateContent";
 import { CONTENT_TYPE_CONFIGS } from "@/shared/config/content-types.config";
 import { countWords } from "@/shared/utils/word-count.utils";
-import { isRichTextEmpty } from "@/shared/utils/rich-text.utils";
+import {
+	hasRichTextChanged,
+	isRichTextEmpty,
+} from "@/shared/utils/rich-text.utils";
 import type { ContentType } from "@/shared/types/inline-edit.types";
 import type { ToolbarMode } from "@/shared/types/editor.types";
 import { sanitizeRichText } from "@/shared/utils/sanitise.utils";
@@ -105,6 +108,25 @@ export const InlineSaveEditor = observer(function InlineSaveEditor({
 	// Local state for saved content (optimistic update)
 	const [savedContent, setSavedContent] = useState(initialContent);
 
+	// The editor's own HTML for the saved content in the current edit session.
+	// Edits are compared against this rather than the stored HTML, which older
+	// editors or Word paste may have serialised differently.
+	const baselineRef = useRef<string | null>(null);
+	const handleBaselineChange = useCallback((html: string) => {
+		baselineRef.current = html;
+	}, []);
+
+	// Check if over word limit
+	const wordCount = useMemo(() => {
+		if (!wordLimit) return 0;
+		return countWords(editedContent);
+	}, [editedContent, wordLimit]);
+
+	const isOverLimit = wordLimit !== undefined && wordCount > wordLimit;
+	// A suggested limit ("Aim for max of X words") guides the author but must not
+	// stop them saving; only a hard limit blocks saving
+	const isOverHardLimit = isOverLimit && !limitCanBePassed;
+
 	// Update mutation
 	const updateMutation = useUpdateContent({
 		contentType,
@@ -139,6 +161,9 @@ export const InlineSaveEditor = observer(function InlineSaveEditor({
 		inlineEditStore.startEdit(contentType, entityId);
 		setStatusMessage("Edit mode activated");
 
+		// A new editor instance loads the content and reports a fresh baseline
+		baselineRef.current = null;
+
 		// Note: Editor registration is handled by useEffect
 		// This ensures it works both on initial click and after tab switches
 
@@ -148,9 +173,9 @@ export const InlineSaveEditor = observer(function InlineSaveEditor({
 		onEditStart?.();
 	};
 
-	// Handle save
+	// Handle save (Save button and Ctrl+S share the same rules)
 	const handleSave = () => {
-		if (!hasChanges || updateMutation.isPending) return;
+		if (!hasChanges || isOverHardLimit || updateMutation.isPending) return;
 		setStatusMessage("Saving content...");
 		updateMutation.mutate(editedContent);
 	};
@@ -175,10 +200,11 @@ export const InlineSaveEditor = observer(function InlineSaveEditor({
 		}, 0);
 	}, [contentType, entityId, savedContent, onCancel, onEditEnd]);
 
-	// Handle content change — use normalised HTML comparison to detect
-	// both text content and structural changes (paragraph→list, heading, etc.)
+	// Fallback comparison for when the editor has not reported a baseline.
 	// Strips all attributes (class, style, data-*, etc.) since Lexical adds its own
-	// during serialisation, but preserves structural tags so p→ul/li changes are detected.
+	// during serialisation, but preserves structural tags so p→ul/li changes are
+	// detected. Attribute-only edits (alignment, indentation) and line breaks are
+	// invisible to it, which is why the baseline comparison is preferred.
 	const normaliseForComparison = (html: string) => {
 		const sanitised = sanitizeRichText(html);
 		return sanitised
@@ -207,9 +233,12 @@ export const InlineSaveEditor = observer(function InlineSaveEditor({
 
 	const handleContentChange = (newContent: string) => {
 		setEditedContent(newContent);
+		const baseline = baselineRef.current;
 		setHasChanges(
-			normaliseForComparison(newContent) !==
-				normaliseForComparison(savedContent)
+			baseline !== null
+				? hasRichTextChanged(baseline, newContent)
+				: normaliseForComparison(newContent) !==
+						normaliseForComparison(savedContent)
 		);
 
 		// Update current content in store (updates immediately for change detection)
@@ -268,6 +297,15 @@ export const InlineSaveEditor = observer(function InlineSaveEditor({
 		}
 	}, [editedContent, isEditing, contentType, entityId]);
 
+	// Share the Save button's change state with the store so the unsaved-changes
+	// warning on navigation follows the same rule. The store's own comparison
+	// drops blank lines and treats older stored HTML as always changed.
+	useEffect(() => {
+		if (isEditing) {
+			inlineEditStore.reportHasChanges(contentType, entityId, hasChanges);
+		}
+	}, [hasChanges, isEditing, contentType, entityId]);
+
 	// Track focus/blur events on the editor container
 	useEffect(() => {
 		const container = editorContainerRef.current;
@@ -318,14 +356,6 @@ export const InlineSaveEditor = observer(function InlineSaveEditor({
 	const effectivePlaceholder = placeholder || config?.defaultPlaceholder || "";
 	const effectiveEmptyMessage =
 		emptyMessage || config?.defaultEmptyMessage || "";
-
-	// Check if over word limit
-	const wordCount = useMemo(() => {
-		if (!wordLimit) return 0;
-		return countWords(editedContent);
-	}, [editedContent, wordLimit]);
-
-	const isOverLimit = wordLimit !== undefined && wordCount > wordLimit;
 
 	// Generate unique IDs for ARIA
 	const errorId = `error-${contentType}-${entityId}`;
@@ -494,6 +524,7 @@ export const InlineSaveEditor = observer(function InlineSaveEditor({
 							ref={editorRef}
 							value={editedContent}
 							onChange={handleContentChange}
+							onBaselineChange={handleBaselineChange}
 							onSave={handleSave}
 							placeholder={effectivePlaceholder}
 							toolbar={toolbarProp}
@@ -503,12 +534,12 @@ export const InlineSaveEditor = observer(function InlineSaveEditor({
 							autoFocus={true}
 							moveCursorToEnd={true}
 							aria-label={`Edit ${typeof label === "string" ? label : "content"}`}
-							aria-invalid={isOverLimit}
+							aria-invalid={isOverHardLimit}
 							aria-describedby={isOverLimit ? errorId : undefined}
 						/>
 
-						{/* Error message for word limit */}
-						{isOverLimit && (
+						{/* Error message for a hard word limit */}
+						{isOverHardLimit && (
 							<div
 								id={errorId}
 								role="alert"
@@ -519,12 +550,24 @@ export const InlineSaveEditor = observer(function InlineSaveEditor({
 							</div>
 						)}
 
+						{/* Advisory message for a suggested word limit — saving is still allowed */}
+						{isOverLimit && !isOverHardLimit && (
+							<div
+								id={errorId}
+								aria-live="polite"
+								className="px-4 pt-2 text-sm text-amber-700 dark:text-amber-400"
+							>
+								Content is over the suggested limit of {wordLimit} words
+							</div>
+						)}
+
 						<div className="flex items-center justify-between p-4">
 							<div className="flex items-center gap-2">
 								<WordCounter
 									content={editedContent}
 									limit={wordLimit}
 									showLimit={!!wordLimit}
+									limitCanBePassed={limitCanBePassed}
 								/>
 								<Button
 									type="button"
@@ -554,7 +597,7 @@ export const InlineSaveEditor = observer(function InlineSaveEditor({
 									type="button"
 									onClick={handleSave}
 									disabled={
-										!hasChanges || isOverLimit || updateMutation.isPending
+										!hasChanges || isOverHardLimit || updateMutation.isPending
 									}
 									size="sm"
 									aria-label={`Save ${typeof label === "string" ? label : "content"}`}
