@@ -45,6 +45,14 @@ export interface BaseComboboxProps<T> {
 
 	// Accessibility
 	ariaLabel?: string; // Fallback accessible name when label is not provided
+	/**
+	 * Mark up the input as an ARIA combobox and the results as a listbox, with
+	 * the highlighted result announced through aria-activedescendant. Each
+	 * result becomes an option that handles its own click and keeps focus in
+	 * the input, so renderMenuItem must return non-interactive content (no
+	 * buttons or links).
+	 */
+	listbox?: boolean;
 
 	// Search configuration
 	debounceMs?: number;

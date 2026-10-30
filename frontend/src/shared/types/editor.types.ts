@@ -21,6 +21,8 @@ export interface RichTextEditorProps {
 	// Content
 	value?: string;
 	onChange?: (html: string) => void;
+	// Receives the editor's own HTML for the loaded content (before the first edit)
+	onBaselineChange?: (html: string) => void;
 	onSave?: () => void; // Callback for Ctrl+S keyboard shortcut
 
 	// Configuration

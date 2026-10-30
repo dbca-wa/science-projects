@@ -14,6 +14,11 @@ export interface EditorState {
 	originalContent: string;
 	currentContent: string;
 
+	// Change state reported by the editor itself (null until it reports).
+	// When set, it overrides the content comparison below so the navigation
+	// warning agrees with the editor's Save button.
+	reportedHasChanges: boolean | null;
+
 	// DOM reference for scrolling
 	elementRef: HTMLElement | null;
 
@@ -55,6 +60,7 @@ export class InlineEditStore {
 			registerEditor: action,
 			unregisterEditor: action,
 			updateCurrentContent: action,
+			reportHasChanges: action,
 			clearAll: action,
 			startEdit: action,
 			endEdit: action,
@@ -148,6 +154,7 @@ export class InlineEditStore {
 			identifier,
 			originalContent: originalContent || "",
 			currentContent: originalContent || "",
+			reportedHasChanges: null,
 			elementRef,
 			contentType,
 			entityId,
@@ -189,6 +196,22 @@ export class InlineEditStore {
 		}, 100);
 
 		this.updateTimers.set(identifier, timer);
+	};
+
+	/**
+	 * Record whether an editor has unsaved changes, as the editor itself decides.
+	 *
+	 * Editors that compare against their own serialised baseline report here, so
+	 * the navigation warning uses the same rule as their Save button.
+	 */
+	reportHasChanges = (
+		contentType: ContentType,
+		entityId: number,
+		hasChanges: boolean
+	): void => {
+		const state = this.editorStates.get(`${contentType}:${entityId}`);
+		if (!state) return;
+		state.reportedHasChanges = hasChanges;
 	};
 
 	/**
@@ -256,6 +279,11 @@ export class InlineEditStore {
 		const state = this.editorStates.get(identifier);
 
 		if (!state) return false;
+
+		// The editor's own decision wins when it has reported one
+		if (state.reportedHasChanges !== null) {
+			return state.reportedHasChanges;
+		}
 
 		// Normalise both contents before comparison to ignore insignificant whitespace
 		const normalisedOriginal = normaliseHtmlContent(state.originalContent);

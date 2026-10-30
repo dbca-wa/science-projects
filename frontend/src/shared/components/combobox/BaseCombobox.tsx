@@ -28,6 +28,7 @@ import type { BaseComboboxProps, BaseComboboxRef } from "./types";
  * - Click-away detection
  * - Optional "add new" functionality
  * - Single-select mode
+ * - Optional ARIA combobox and listbox markup (`listbox` prop)
  *
  * @template T - The type of items in the combobox
  *
@@ -73,6 +74,7 @@ export const BaseCombobox = forwardRef(
 			maxResults = 10,
 			minSearchLength = 0,
 			ariaLabel,
+			listbox = false,
 		} = props;
 
 		const inputRef = useRef<HTMLInputElement>(null);
@@ -87,6 +89,7 @@ export const BaseCombobox = forwardRef(
 		const uniqueId = useId();
 		const inputId = `combobox-input-${uniqueId}`;
 		const helperTextId = `combobox-helper-${uniqueId}`;
+		const listboxId = `combobox-listbox-${uniqueId}`;
 
 		// Debounce search term
 		const debouncedSearchTerm = useDebouncedValue(searchTerm, debounceMs);
@@ -225,6 +228,20 @@ export const BaseCombobox = forwardRef(
 			searchTerm.trim() !== "" &&
 			filteredItems.length === 0;
 
+		const isResultsOpen =
+			(filteredItems.length > 0 || showCreateOption || showCreateClickOption) &&
+			isMenuOpen;
+		const optionCount =
+			filteredItems.length +
+			(showCreateOption || showCreateClickOption ? 1 : 0);
+		const activeOptionId =
+			listbox &&
+			isResultsOpen &&
+			highlightedIndex >= 0 &&
+			highlightedIndex < optionCount
+				? getOptionId(listboxId, highlightedIndex)
+				: undefined;
+
 		return (
 			<div
 				ref={wrapperRef}
@@ -290,17 +307,27 @@ export const BaseCombobox = forwardRef(
 							aria-required={isRequired}
 							aria-describedby={helperText ? helperTextId : undefined}
 							aria-label={!label ? ariaLabel : undefined}
+							{...(listbox && {
+								role: "combobox",
+								"aria-autocomplete": "list" as const,
+								"aria-expanded": isResultsOpen,
+								"aria-controls": listboxId,
+								"aria-activedescendant": activeOptionId,
+							})}
 						/>
 					</div>
 				)}
 				{!value && (
 					<div className="relative w-full">
 						<SearchResultsPortal
-							isOpen={
-								(filteredItems.length > 0 ||
-									showCreateOption ||
-									showCreateClickOption) &&
-								isMenuOpen
+							isOpen={isResultsOpen}
+							listbox={
+								listbox
+									? {
+											id: listboxId,
+											label: label || ariaLabel || "Search results",
+										}
+									: undefined
 							}
 							inputRef={inputRef}
 							items={filteredItems}
@@ -336,8 +363,34 @@ export const BaseCombobox = forwardRef(
 
 // =========================================== INTERNAL COMPONENTS ====================================================
 
+/** Id of the option at an index in a combobox's listbox */
+const getOptionId = (listboxId: string, index: number) =>
+	`${listboxId}-option-${index}`;
+
+/**
+ * Props for an entry in the results. In listbox mode the entry is an option
+ * that selects on click; mousedown is cancelled so focus stays in the input.
+ */
+const getEntryProps = (
+	listbox: { id: string } | undefined,
+	index: number,
+	isHighlighted: boolean,
+	onActivate: () => void
+) =>
+	listbox
+		? {
+				id: getOptionId(listbox.id, index),
+				role: "option" as const,
+				"aria-selected": isHighlighted,
+				onMouseDown: (event: React.MouseEvent) => event.preventDefault(),
+				onClick: onActivate,
+			}
+		: {};
+
 interface SearchResultsPortalProps<T> {
 	isOpen: boolean;
+	/** Listbox id and accessible name, when the results form a listbox */
+	listbox?: { id: string; label: string };
 	inputRef: RefObject<HTMLInputElement | null>;
 	items: T[];
 	onSelect: (item: T) => void;
@@ -361,6 +414,7 @@ interface SearchResultsPortalProps<T> {
 
 const SearchResultsPortal = <T,>({
 	isOpen,
+	listbox,
 	inputRef,
 	items,
 	onSelect,
@@ -461,7 +515,14 @@ const SearchResultsPortal = <T,>({
 				width: `${position.width}px`,
 			}}
 		>
-			<div className="relative w-full">
+			<div
+				className="relative w-full"
+				{...(listbox && {
+					id: listbox.id,
+					role: "listbox",
+					"aria-label": listbox.label,
+				})}
+			>
 				{items.map((item, index) => (
 					<div
 						key={getItemKey(item)}
@@ -473,13 +534,56 @@ const SearchResultsPortal = <T,>({
 							}
 						}}
 						onMouseEnter={() => onHighlightChange(index)}
+						{...getEntryProps(listbox, index, index === highlightedIndex, () =>
+							onSelect(item)
+						)}
 					>
 						{renderMenuItem(item, onSelect, index === highlightedIndex)}
 					</div>
 				))}
 
+				{/* Create options as listbox entries */}
+				{listbox && (showCreateOption || showCreateClickOption) && (
+					<div
+						ref={(el) => {
+							if (el) {
+								itemRefs.current.set(items.length, el);
+							} else {
+								itemRefs.current.delete(items.length);
+							}
+						}}
+						onMouseEnter={() => onHighlightChange(items.length)}
+						className={cn(
+							"w-full text-left px-3 py-2 transition-colors border-t border-gray-200 dark:border-gray-600 cursor-pointer",
+							highlightedIndex === items.length &&
+								"bg-gray-200 dark:bg-gray-600"
+						)}
+						{...getEntryProps(
+							listbox,
+							items.length,
+							highlightedIndex === items.length,
+							() => {
+								if (showCreateOption) {
+									if (!isCreating) onCreateNew();
+								} else {
+									onCreateNewClick?.();
+								}
+							}
+						)}
+						aria-disabled={showCreateOption && isCreating ? true : undefined}
+					>
+						<span className="text-green-600 dark:text-green-400 flex items-center gap-2 text-sm">
+							{showCreateOption
+								? isCreating
+									? "Creating..."
+									: createNewLabel
+								: createNewClickLabel}
+						</span>
+					</div>
+				)}
+
 				{/* Create new option */}
-				{showCreateOption && (
+				{!listbox && showCreateOption && (
 					<button
 						type="button"
 						onClick={onCreateNew}
@@ -505,7 +609,7 @@ const SearchResultsPortal = <T,>({
 				)}
 
 				{/* Fire-and-forget create option (for modal-based creation) */}
-				{showCreateClickOption && onCreateNewClick && (
+				{!listbox && showCreateClickOption && onCreateNewClick && (
 					<button
 						type="button"
 						onClick={onCreateNewClick}

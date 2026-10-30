@@ -7,7 +7,10 @@ import type {
 } from "@/shared/types/project.types";
 import type { IUserData } from "@/shared/types/user.types";
 import { useCurrentUser } from "@/features/auth";
-import { calculateDocumentEditPermission } from "@/features/projects/utils/permissions";
+import {
+	calculateDocumentEditPermission,
+	calculateRelatedProjectsEditPermission,
+} from "@/features/projects/utils/permissions";
 import {
 	isProjectPlanLocked,
 	isReportCreationLocked,
@@ -23,6 +26,7 @@ import { ManageEditExceptionsModal } from "@/features/projects/components/modals
 import { MethodologyImage } from "@/features/projects/components/MethodologyImage";
 import { ProjectPlanEndorsements } from "@/features/projects/components/ProjectPlanEndorsements";
 import { CommentSection } from "@/features/projects/components/comments";
+import { RelatedProjectsSection } from "@/features/projects/components/related-projects";
 import { Alert, AlertDescription } from "@/shared/components/ui/alert";
 import { Button } from "@/shared/components/ui/button";
 import { CheckCircle, Plus, Lock, LockOpen } from "lucide-react";
@@ -93,6 +97,18 @@ export const ProjectPlanTab = ({
 		currentUser?.is_superuser,
 		hasActiveException
 	);
+
+	// The related projects list, and clearing the text recorded before it,
+	// stay available when the plan is locked, for the people who work on the
+	// project
+	const canEditRelatedProjects = calculateRelatedProjectsEditPermission({
+		currentUser,
+		members,
+		isBaLead,
+		userIsCaretakerOfBaLeader,
+		userIsCaretakerOfProjectLeader,
+		userIsCaretakerOfAdmin,
+	});
 
 	// Lock report creation if project is terminated/completed or has approved closure
 	const isCreationLocked = isReportCreationLocked(project, all_documents);
@@ -316,13 +332,10 @@ export const ProjectPlanTab = ({
 
 					{/* Related Science Projects */}
 					<ProjectSection>
-						<InlineSaveEditor
-							contentType="project-plan-related-projects"
-							entityId={projectPlan.id}
-							initialContent={projectPlan.related_projects || ""}
-							canEdit={canEdit}
-							lockedMessage={lockedMessage}
-							label="Related Science Projects"
+						<RelatedProjectsSection
+							projectPlan={projectPlan}
+							projectId={projectId}
+							canEditList={canEditRelatedProjects}
 						/>
 					</ProjectSection>
 

@@ -1,6 +1,11 @@
 // PROJECT DOCUMENTS ============================================================================
 
-import type { IProjectData, IProjectMember } from "./project.types";
+import type {
+	IProjectData,
+	IProjectMember,
+	ProjectKind,
+	ProjectStatus,
+} from "./project.types";
 
 interface IAECPDF {
 	created_at: Date;
@@ -133,8 +138,44 @@ export interface IProjectPlan {
 	methodology: string | null;
 	methodology_image: IMethodologyImage | null;
 	project_tasks: string | null;
+	/** Legacy free text, kept until related projects links are confirmed */
 	related_projects: string | null;
 	endorsements: IEndorsement | null;
+	/** Projects in the plan's related projects list */
+	related_project_links: IRelatedProject[];
+	/** Projects the matching script found in the legacy text but could not confirm */
+	related_project_suggestions: IRelatedProject[];
+}
+
+/** How a related project row was added */
+export type RelatedProjectSource = "manual" | "script";
+
+/** What the matching script matched on; empty for rows people added */
+export type RelatedProjectMatchType = "code" | "title" | "";
+
+/** The details of a related project shown in a plan's list */
+export interface IRelatedProjectSummary {
+	id: number;
+	/** May contain inline HTML */
+	title: string;
+	kind: ProjectKind;
+	status: ProjectStatus;
+	year: number;
+	number: number;
+	/** e.g. "SP-2024-11" */
+	tag: string;
+	leader: string | null;
+}
+
+/** A linked project, or a suggestion, on a project plan */
+export interface IRelatedProject {
+	id: number;
+	related_project: IRelatedProjectSummary;
+	status: "linked" | "suggested";
+	source: RelatedProjectSource;
+	match_type: RelatedProjectMatchType;
+	matched_text: string;
+	created_at: string;
 }
 
 export interface IProgressReport {

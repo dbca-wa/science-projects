@@ -155,6 +155,15 @@ class TestBuildMockContext:
         assert any(approvals), "Expected at least one True approval"
         assert not all(approvals), "Expected at least one False approval"
 
+    def test_project_plan_related_projects_lists_linked_projects(self):
+        """The preview shows linked projects as a list, then legacy free text."""
+        context = TestPDFService._build_mock_context("projectplan")
+        data = context["html_data_items"]["related_projects"]["data"]
+
+        assert data.count("<li") == 2
+        assert "SP-2024-3 &ndash;" in data
+        assert data.index("</ul>") < data.index("<p")
+
     def test_invalid_document_kind_raises_value_error(self):
         """Invalid document kind raises ValueError."""
         with pytest.raises(ValueError, match="Invalid document_kind"):

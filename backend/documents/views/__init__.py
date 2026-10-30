@@ -107,6 +107,13 @@ from .progress_report import (
 # Project plan views
 from .project_plan import CreateProjectPlanFromConcept, ProjectPlanDetail, ProjectPlans
 
+# Related projects views
+from .related_projects import (
+    ProjectPlanLegacyRelatedProjects,
+    ProjectPlanRelatedProjectDetail,
+    ProjectPlanRelatedProjects,
+)
+
 # Student report views
 from .student_report import (
     StudentReportByYear,
@@ -146,6 +153,9 @@ __all__ = [
     "ProjectPlans",
     "ProjectPlanDetail",
     "CreateProjectPlanFromConcept",
+    "ProjectPlanRelatedProjects",
+    "ProjectPlanRelatedProjectDetail",
+    "ProjectPlanLegacyRelatedProjects",
     # Progress report
     "ProgressReports",
     "ProgressReportDetail",

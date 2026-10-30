@@ -13,6 +13,8 @@ from rest_framework.exceptions import ValidationError
 
 from common.utils.file_validation import generate_content_hash
 
+from .related_project_service import RelatedProjectService
+
 
 class PDFService:
     """PDF generation service using Prince XML"""
@@ -452,7 +454,7 @@ class PDFService:
             try:
                 if project.business_area and project.business_area.division:
                     return project.business_area.division.name
-            except (AttributeError, TypeError):
+            except AttributeError, TypeError:
                 pass
             return "Biodiversity and Conservation Science"
 
@@ -609,7 +611,11 @@ class PDFService:
                         },
                         "related_projects": {
                             "title": "Related Projects",
-                            "data": apply_styling(details.related_projects),
+                            "data": apply_styling(
+                                RelatedProjectService.build_pdf_html(
+                                    details, details.related_projects
+                                )
+                            ),
                         },
                         "consolidated_funds": {
                             "title": "Consolidated Funds",

@@ -6,8 +6,10 @@
  * Each editor gets a unique key. On focus, it registers as the active editor
  * so the toolbar always operates on — and highlights for — the focused editor only.
  *
- * Editors do NOT register on mount to avoid race conditions when multiple editors
- * are on the same page. Only the focused editor is active.
+ * An editor only registers on mount when no other editor is active, or when it
+ * already holds focus (initial content loading can focus it before this plugin's
+ * listeners exist). On unmount it releases the store so commands are never sent
+ * to a destroyed editor.
  *
  * Uses both Lexical FOCUS_COMMAND and DOM focusin to handle editors that start
  * non-editable (EditableOnInteractionPlugin pattern).
@@ -34,17 +36,21 @@ export const EditorStoreIntegrationPlugin = observer(
 		useEffect(() => {
 			if (!editor) return;
 
+			const activate = () => {
+				editorStore.initLexicalEditor(editor, key);
+			};
+
 			// Only register on mount if no editor is currently active
 			// (first editor on the page gets to be active by default)
 			if (!editorStore.activeEditorKey) {
-				editorStore.initLexicalEditor(editor, key);
+				activate();
 			}
 
 			// Register on Lexical FOCUS_COMMAND — fires when editor is already editable
 			const removeFocusListener = editor.registerCommand(
 				FOCUS_COMMAND,
 				() => {
-					editorStore.initLexicalEditor(editor, key);
+					activate();
 					return false;
 				},
 				COMMAND_PRIORITY_LOW
@@ -52,12 +58,22 @@ export const EditorStoreIntegrationPlugin = observer(
 
 			// Also listen on DOM focusin — catches focus when editor starts non-editable
 			// (EditableOnInteractionPlugin makes it editable on click/focus, but Lexical's
-			// FOCUS_COMMAND may not fire if the editor wasn't editable at the time)
-			const rootElement = editor.getRootElement();
-			const handleDomFocusIn = () => {
-				editorStore.initLexicalEditor(editor, key);
-			};
-			rootElement?.addEventListener("focusin", handleDomFocusIn);
+			// FOCUS_COMMAND may not fire if the editor wasn't editable at the time).
+			// A root listener keeps the handler attached to the current content editable.
+			const removeRootListener = editor.registerRootListener((rootElement) => {
+				if (!rootElement) return;
+
+				rootElement.addEventListener("focusin", activate);
+
+				// Loading the initial content places the DOM selection inside the editor,
+				// which focuses it before these listeners exist. Focus events for that
+				// are missed and do not fire again, so activate now if already focused.
+				if (rootElement.contains(document.activeElement)) {
+					activate();
+				}
+
+				return () => rootElement.removeEventListener("focusin", activate);
+			});
 
 			// On blur, clear formatting state so the toolbar doesn't show
 			// stale state from a previously focused editor
@@ -103,7 +119,9 @@ export const EditorStoreIntegrationPlugin = observer(
 			return () => {
 				removeFocusListener();
 				removeBlurListener();
-				rootElement?.removeEventListener("focusin", handleDomFocusIn);
+				removeRootListener();
+				// Stop the store routing toolbar commands to this editor once it unmounts
+				editorStore.releaseLexicalEditor(editor);
 			};
 		}, [editor, editorStore, key]);
 

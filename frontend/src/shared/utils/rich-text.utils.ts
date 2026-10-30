@@ -104,3 +104,28 @@ export const isRichTextEmpty = (html: string | null | undefined): boolean => {
 	} while (textContent !== previous);
 	return textContent.trim().length === 0;
 };
+
+// Elements that are content in their own right even without any text
+const NON_TEXT_CONTENT_PATTERN = /<(img|table|hr|iframe|video|audio)\b/i;
+
+/**
+ * Whether rich text has neither text nor non-text content such as images or tables.
+ */
+const isRichTextBlank = (html: string): boolean =>
+	isRichTextEmpty(html) && !NON_TEXT_CONTENT_PATTERN.test(html);
+
+/**
+ * Check whether edited rich text differs from a baseline.
+ *
+ * Both values must come from the same editor's HTML export, so any difference
+ * is a real edit: text, structure, formatting, alignment, indentation, line
+ * breaks or blank lines. Content that is blank on both sides counts as
+ * unchanged, because the editor may add an empty paragraph to hold the cursor.
+ */
+export const hasRichTextChanged = (
+	baseline: string,
+	current: string
+): boolean => {
+	if (isRichTextBlank(baseline) && isRichTextBlank(current)) return false;
+	return baseline.trim() !== current.trim();
+};

@@ -163,7 +163,17 @@ def _build_project_plan_items():
         },
         "related_projects": {
             "title": "Related Projects",
-            "data": "<p>SP-2024-003: Swan Coastal Plain Wetland Hydrology Monitoring</p>",
+            # Linked projects as built by RelatedProjectService.build_pdf_html,
+            # followed by legacy free text
+            "data": (
+                "<ul>"
+                "<li>SP-2024-3 &ndash; Swan Coastal Plain Wetland Hydrology Monitoring</li>"
+                "<li>SP-2022-33 &ndash; Ellen Brook catchment nutrient export: "
+                "sources and pathways</li>"
+                "</ul>"
+                "<p>Previously recorded: consulted the Wetlands Conservation Program "
+                "leader on shared monitoring sites.</p>"
+            ),
         },
         "consolidated_funds": {
             "title": "Consolidated Funds",

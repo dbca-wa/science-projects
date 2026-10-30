@@ -35,6 +35,17 @@ export type ProjectStatus =
 // Project Kind
 export type ProjectKind = "core_function" | "science" | "student" | "external";
 
+/** A project as returned by the small project search (projects/smallsearch) */
+export interface IProjectSearchResult {
+	id: number;
+	/** May contain inline HTML */
+	title: string;
+	kind: ProjectKind;
+	status: ProjectStatus;
+	year: number;
+	number: number;
+}
+
 // Project Roles
 export type ProjectRoles =
 	| "supervising"

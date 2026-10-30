@@ -101,7 +101,7 @@ class Projects(APIView):
         if year is not None:
             try:
                 year = int(year)
-            except (ValueError, TypeError):
+            except ValueError, TypeError:
                 year = None
 
         # Prepare project data
@@ -294,8 +294,11 @@ class ProjectDetails(APIView):
             TinyConceptPlanSerializer,
             TinyProgressReportSerializer,
             TinyProjectClosureSerializer,
-            TinyProjectPlanSerializer,
+            TinyProjectPlanWithRelatedProjectsSerializer,
             TinyStudentReportSerializer,
+        )
+        from documents.services.related_project_service import (
+            visible_rows_prefetch,
         )
 
         from ..models import (
@@ -380,10 +383,12 @@ class ProjectDetails(APIView):
 
         # Get project plan
         try:
-            project_plan = ProjectPlan.objects.select_related(
-                "document", "document__project"
-            ).get(project=project)
-            documents["project_plan"] = TinyProjectPlanSerializer(
+            project_plan = (
+                ProjectPlan.objects.select_related("document", "document__project")
+                .prefetch_related(visible_rows_prefetch())
+                .get(project=project)
+            )
+            documents["project_plan"] = TinyProjectPlanWithRelatedProjectsSerializer(
                 project_plan, context=doc_context
             ).data
         except ProjectPlan.DoesNotExist:

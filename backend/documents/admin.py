@@ -17,6 +17,7 @@ from .models import (
     ProjectClosure,
     ProjectDocument,
     ProjectPlan,
+    ProjectPlanRelatedProject,
     StudentReport,
 )
 
@@ -317,6 +318,37 @@ class ProjectPlanAdmin(admin.ModelAdmin):
     @admin.display(description="Document Status")
     def doc_status(self, obj):
         return obj.document.get_status_display()
+
+
+@admin.register(ProjectPlanRelatedProject)
+class ProjectPlanRelatedProjectAdmin(admin.ModelAdmin):
+    list_display = (
+        "pk",
+        "project_plan",
+        "related_project",
+        "status",
+        "source",
+        "match_type",
+        "status_changed_by",
+        "updated_at",
+    )
+
+    list_filter = ("status", "source", "match_type")
+
+    search_fields = [
+        "project_plan__project__title",
+        "related_project__title",
+        "matched_text",
+    ]
+
+    raw_id_fields = (
+        "project_plan",
+        "related_project",
+        "created_by",
+        "status_changed_by",
+    )
+
+    ordering = ["-updated_at"]
 
 
 @admin.register(ProgressReport)

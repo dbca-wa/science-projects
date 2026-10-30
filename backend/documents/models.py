@@ -1,6 +1,6 @@
 # region Imports ===================================
 from bs4 import BeautifulSoup
-from django.core.exceptions import ObjectDoesNotExist
+from django.core.exceptions import ObjectDoesNotExist, ValidationError
 from django.core.validators import MinValueValidator
 from django.db import models
 from rest_framework import serializers
@@ -170,7 +170,7 @@ class AnnualReport(CommonModel):
                 and director.profile.title
             ):
                 title_prefix = director.profile.get_title_display()
-        except (AttributeError, ObjectDoesNotExist):
+        except AttributeError, ObjectDoesNotExist:
             pass
 
         # Build name with proper capitalisation
@@ -519,6 +519,100 @@ class ProjectPlan(models.Model):
     class Meta:
         verbose_name = "Project Plan"
         verbose_name_plural = "Project Plans"
+
+
+class ProjectPlanRelatedProject(CommonModel):
+    """
+    A project in a project plan's related projects list, or a suggestion for it.
+
+    One row per plan and project. Removing a project or dismissing a suggestion
+    keeps the row as dismissed, so the matching script never adds it back.
+    """
+
+    class StatusChoices(models.TextChoices):
+        LINKED = "linked", "In the related projects list"
+        SUGGESTED = "suggested", "Suggested by the matching script"
+        DISMISSED = "dismissed", "Removed or dismissed by a person"
+
+    class SourceChoices(models.TextChoices):
+        MANUAL = "manual", "Added by a person"
+        SCRIPT = "script", "Added by the matching script"
+
+    class MatchTypeChoices(models.TextChoices):
+        CODE = "code", "Project code"
+        TITLE = "title", "Project title"
+
+    project_plan = models.ForeignKey(
+        "documents.ProjectPlan",
+        on_delete=models.CASCADE,
+        related_name="related_project_rows",
+    )
+    related_project = models.ForeignKey(
+        "projects.Project",
+        on_delete=models.CASCADE,
+        related_name="related_plan_rows",
+    )
+    status = models.CharField(
+        max_length=10,
+        choices=StatusChoices.choices,
+        default=StatusChoices.LINKED,
+    )
+    source = models.CharField(
+        max_length=10,
+        choices=SourceChoices.choices,
+        default=SourceChoices.MANUAL,
+    )
+    # Only set for rows the matching script adds
+    match_type = models.CharField(
+        max_length=10,
+        choices=MatchTypeChoices.choices,
+        blank=True,
+        default="",
+    )
+    matched_text = models.CharField(max_length=255, blank=True, default="")
+    created_by = models.ForeignKey(
+        "users.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+    # Last person to add, accept, remove or dismiss; null means no person has
+    # touched a row the script added
+    status_changed_by = models.ForeignKey(
+        "users.User",
+        null=True,
+        blank=True,
+        on_delete=models.SET_NULL,
+        related_name="+",
+    )
+
+    def clean(self):
+        super().clean()
+        if (
+            self.project_plan_id
+            and self.related_project_id
+            and self.project_plan.project_id == self.related_project_id
+        ):
+            raise ValidationError(
+                {"related_project": "A project plan cannot list its own project."}
+            )
+
+    def __str__(self) -> str:
+        return (
+            f"Plan {self.project_plan_id} -> project {self.related_project_id} "
+            f"({self.status})"
+        )
+
+    class Meta:
+        verbose_name = "Project Plan Related Project"
+        verbose_name_plural = "Project Plan Related Projects"
+        constraints = [
+            models.UniqueConstraint(
+                fields=["project_plan", "related_project"],
+                name="unique_project_plan_related_project",
+            ),
+        ]
 
 
 class ProgressReport(models.Model):

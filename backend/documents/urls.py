@@ -69,6 +69,18 @@ urlpatterns = [
     path("projectplans", views.ProjectPlans.as_view()),
     path("projectplans/<int:pk>", views.ProjectPlanDetail.as_view()),
     path(
+        "projectplans/<int:pk>/related_projects",
+        views.ProjectPlanRelatedProjects.as_view(),
+    ),
+    path(
+        "projectplans/<int:pk>/related_projects/legacy_text",
+        views.ProjectPlanLegacyRelatedProjects.as_view(),
+    ),
+    path(
+        "projectplans/<int:pk>/related_projects/<int:link_pk>",
+        views.ProjectPlanRelatedProjectDetail.as_view(),
+    ),
+    path(
         "create-project-plan/<int:project_pk>",
         views.CreateProjectPlanFromConcept.as_view(),
     ),

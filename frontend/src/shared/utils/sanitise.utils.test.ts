@@ -1,5 +1,10 @@
 import { describe, it, expect } from "vitest";
-import { sanitizeInput, sanitizeUrl, sanitizeRichText } from "./sanitise.utils";
+import {
+	sanitizeInput,
+	sanitizeUrl,
+	sanitizeRichText,
+	toPlainText,
+} from "./sanitise.utils";
 
 describe("sanitise.utils", () => {
 	describe("sanitizeInput", () => {
@@ -21,6 +26,40 @@ describe("sanitise.utils", () => {
 			const input = "Just plain text";
 			const result = sanitizeInput(input);
 			expect(result).toBe("Just plain text");
+		});
+	});
+
+	describe("toPlainText", () => {
+		it("removes tags and decodes entities", () => {
+			expect(toPlainText("<p>Fish &amp; fauna <em>survey</em></p>")).toBe(
+				"Fish & fauna survey"
+			);
+		});
+
+		it("keeps escaped markup as text", () => {
+			expect(toPlainText("<p>&lt;b&gt;not bold&lt;/b&gt;</p>")).toBe(
+				"<b>not bold</b>"
+			);
+		});
+
+		it("collapses whitespace, including non-breaking spaces", () => {
+			expect(
+				toPlainText(
+					"<p>&nbsp;</p>\n<p><span>&nbsp;</span>Aluta&nbsp; quadrata</p>"
+				)
+			).toBe("Aluta quadrata");
+		});
+
+		it("drops script and style content", () => {
+			expect(
+				toPlainText("<script>alert(1)</script><style>p{}</style>Title")
+			).toBe("Title");
+		});
+
+		it("returns an empty string for empty input", () => {
+			expect(toPlainText("")).toBe("");
+			expect(toPlainText(null)).toBe("");
+			expect(toPlainText(undefined)).toBe("");
 		});
 	});
 
