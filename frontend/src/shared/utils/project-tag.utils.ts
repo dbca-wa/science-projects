@@ -27,7 +27,9 @@ const PROJECT_KIND_TO_TYPE: Record<ProjectKind, string> = {
  * - "SP-2024-2025-6" (year range)
  * - "SP-2024--6" (open-ended range)
  */
-export function formatProjectTag(project: IProjectData): string {
+export function formatProjectTag(
+	project: Pick<IProjectData, "kind" | "year" | "number">
+): string {
 	const type = PROJECT_KIND_TO_TYPE[project.kind];
 
 	// Handle missing year gracefully

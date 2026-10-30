@@ -4,15 +4,22 @@
  * A compact absolute-positioned toolbar that appears near the user's text selection,
  * providing formatting, structure, and link controls based on the active toolbar mode.
  * Positioned relative to the .editor-container to avoid z-index conflicts with
- * Dialog/Drawer wrappers.
+ * Dialog/Drawer wrappers, and kept wholly inside it (see
+ * floating-toolbar-position.ts) because the boxes around the editor clip
+ * anything that overflows.
  */
 
-import { useState, useEffect, useCallback, useRef } from "react";
+import {
+	useState,
+	useEffect,
+	useLayoutEffect,
+	useCallback,
+	useRef,
+} from "react";
 import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import {
 	$getSelection,
 	$isRangeSelection,
-	$isTextNode,
 	SELECTION_CHANGE_COMMAND,
 	FORMAT_TEXT_COMMAND,
 } from "lexical";
@@ -38,9 +45,15 @@ import {
 	AlignJustify,
 } from "lucide-react";
 import { useLinkEditor } from "../toolbar/link-editor.utils";
+import { $clearTextFormatting } from "../toolbar/clear-formatting.utils";
 import { useEditorStore } from "@/app/stores/store-context";
 import { TOOLBAR_CONFIGS } from "../toolbar/toolbar-configs";
 import type { ToolbarMode } from "@/shared/types/editor.types";
+import {
+	computeFloatingToolbarPosition,
+	FLOATING_TOOLBAR_EDGE_MARGIN,
+	type FloatingToolbarAnchor,
+} from "./floating-toolbar-position";
 
 interface FloatingLinkToolbarProps {
 	showLinks: boolean;
@@ -48,9 +61,6 @@ interface FloatingLinkToolbarProps {
 	/** Key of the editor this toolbar belongs to, shared with the main toolbar */
 	editorKey?: string;
 }
-
-const TOOLBAR_HEIGHT = 36;
-const TOOLBAR_GAP = 10;
 
 export const FloatingLinkToolbar = ({
 	showLinks,
@@ -60,7 +70,9 @@ export const FloatingLinkToolbar = ({
 	const [editor] = useLexicalComposerContext();
 	const linkEditor = useLinkEditor();
 	const editorStore = useEditorStore();
-	const [position, setPosition] = useState<{
+	// Where the selection is; the toolbar is then placed once its size is known
+	const [anchor, setAnchor] = useState<FloatingToolbarAnchor | null>(null);
+	const [placement, setPlacement] = useState<{
 		top: number;
 		left: number;
 	} | null>(null);
@@ -115,7 +127,7 @@ export const FloatingLinkToolbar = ({
 			selection.isCollapsed() ||
 			!editor.isEditable()
 		) {
-			setPosition(null);
+			setAnchor(null);
 			setVisible(false);
 			return;
 		}
@@ -167,7 +179,7 @@ export const FloatingLinkToolbar = ({
 
 	const updatePosition = useCallback(() => {
 		if (linkEditor?.state.isOpen || mouseIsDown.current) {
-			setPosition(null);
+			setAnchor(null);
 			setVisible(false);
 			return;
 		}
@@ -178,54 +190,60 @@ export const FloatingLinkToolbar = ({
 			nativeSelection.rangeCount === 0 ||
 			nativeSelection.isCollapsed
 		) {
-			setPosition(null);
+			setAnchor(null);
 			setVisible(false);
 			return;
 		}
 
-		const container = editor
-			.getRootElement()
-			?.closest(".editor-container") as HTMLElement | null;
-		if (!container) {
-			setPosition(null);
-			setVisible(false);
-			return;
-		}
-
+		// The browser selection is shared by every editor on the page. Only the
+		// editor that holds it shows its toolbar.
+		const rootElement = editor.getRootElement();
 		const range = nativeSelection.getRangeAt(0);
+		if (
+			!rootElement ||
+			!rootElement.contains(range.startContainer) ||
+			!rootElement.contains(range.endContainer)
+		) {
+			setAnchor(null);
+			setVisible(false);
+			return;
+		}
+
+		const container = rootElement.closest(
+			".editor-container"
+		) as HTMLElement | null;
+		if (!container) {
+			setAnchor(null);
+			setVisible(false);
+			return;
+		}
+
 		const rects = range.getClientRects();
 		if (rects.length === 0) {
-			setPosition(null);
+			setAnchor(null);
 			setVisible(false);
 			return;
 		}
 
 		const containerRect = container.getBoundingClientRect();
-
-		// Position centred above the selection (matching CanvaDocs reference behaviour)
 		const startRect = rects[0];
 		const endRect = rects[rects.length - 1];
 		const selLeft = Math.min(startRect.left, endRect.left);
 		const selRight = Math.max(startRect.right, endRect.right);
 
-		// Vertical: above the selection start, with gap
-		let top = startRect.top - containerRect.top - TOOLBAR_HEIGHT - TOOLBAR_GAP;
-
-		// Horizontal: set left to selection midpoint — CSS translateX(-50%) handles centering
-		const left = selLeft - containerRect.left + (selRight - selLeft) / 2;
-
-		// Flip below if it would overflow the top of the container or overlap the main toolbar
 		const mainToolbar = container.querySelector(".editor-toolbar");
 		const mainToolbarBottom = mainToolbar
 			? mainToolbar.getBoundingClientRect().bottom - containerRect.top
 			: 0;
 
-		if (top < mainToolbarBottom) {
-			// Position below the selection end instead
-			top = endRect.bottom - containerRect.top + TOOLBAR_GAP;
-		}
-
-		setPosition({ top, left });
+		setAnchor({
+			selectionTop: startRect.top - containerRect.top,
+			selectionBottom: endRect.bottom - containerRect.top,
+			selectionCentre: (selLeft + selRight) / 2 - containerRect.left,
+			containerWidth: containerRect.width,
+			containerHeight: containerRect.height,
+			mainToolbarBottom,
+		});
 		setVisible(true);
 	}, [editor, linkEditor?.state.isOpen]);
 
@@ -237,7 +255,7 @@ export const FloatingLinkToolbar = ({
 		const handleMouseDown = () => {
 			mouseIsDown.current = true;
 			setVisible(false);
-			setPosition(null);
+			setAnchor(null);
 		};
 		const handleMouseUp = (e: MouseEvent) => {
 			mouseIsDown.current = false;
@@ -283,6 +301,28 @@ export const FloatingLinkToolbar = ({
 		);
 	}, [editor, updateToolbar, updatePosition]);
 
+	// Hide when the selection moves to another editor or elsewhere on the page,
+	// which this editor's own commands do not report
+	useEffect(() => {
+		const handleSelectionChange = () => {
+			if (mouseIsDown.current) return;
+			const nativeSelection = window.getSelection();
+			const rootElement = editor.getRootElement();
+			const inThisEditor =
+				!!nativeSelection &&
+				nativeSelection.rangeCount > 0 &&
+				!!rootElement &&
+				rootElement.contains(nativeSelection.anchorNode);
+			if (!inThisEditor) {
+				setAnchor(null);
+				setVisible(false);
+			}
+		};
+		document.addEventListener("selectionchange", handleSelectionChange);
+		return () =>
+			document.removeEventListener("selectionchange", handleSelectionChange);
+	}, [editor]);
+
 	// Listen for editor updates
 	useEffect(() => {
 		return editor.registerUpdateListener(({ editorState }) => {
@@ -292,6 +332,19 @@ export const FloatingLinkToolbar = ({
 			updatePosition();
 		});
 	}, [editor, updateToolbar, updatePosition]);
+
+	// Place the toolbar once it has rendered and its size is known, before the
+	// browser paints, so it never shows outside the editor
+	useLayoutEffect(() => {
+		const toolbarElement = toolbarRef.current;
+		if (!anchor || !toolbarElement) return;
+		setPlacement(
+			computeFloatingToolbarPosition(anchor, {
+				width: toolbarElement.offsetWidth,
+				height: toolbarElement.offsetHeight,
+			})
+		);
+	}, [anchor, visible]);
 
 	const handleClick = useCallback(() => {
 		if (!linkEditor) return;
@@ -330,20 +383,11 @@ export const FloatingLinkToolbar = ({
 	}, [editor, linkEditor]);
 
 	const handleClearFormatting = useCallback(() => {
-		editor.update(() => {
-			const selection = $getSelection();
-			if ($isRangeSelection(selection)) {
-				selection.getNodes().forEach((node) => {
-					if ($isTextNode(node)) {
-						node.setFormat(0);
-					}
-				});
-			}
-		});
+		editor.update($clearTextFormatting);
 	}, [editor]);
 
 	if (
-		!position ||
+		!anchor ||
 		!visible ||
 		linkEditor?.state.isOpen ||
 		visibleButtonCount <= 1
@@ -386,11 +430,15 @@ export const FloatingLinkToolbar = ({
 	return (
 		<div
 			ref={toolbarRef}
-			className="absolute z-10 flex items-center gap-0.5 rounded-md border border-slate-200 bg-white p-1 shadow-lg transition-opacity duration-150 dark:border-gray-700 dark:bg-gray-800"
+			// z-30 draws over the main toolbar (z-20) when the two overlap.
+			// flex-wrap with a max width keeps every button inside narrow editors.
+			className="absolute z-30 flex w-max flex-wrap items-center gap-0.5 rounded-md border border-slate-200 bg-white p-1 shadow-lg transition-opacity duration-150 dark:border-gray-700 dark:bg-gray-800"
 			style={{
-				top: position.top,
-				left: position.left,
-				transform: "translateX(-50%)",
+				top: placement?.top ?? 0,
+				left: placement?.left ?? FLOATING_TOOLBAR_EDGE_MARGIN,
+				maxWidth: anchor.containerWidth - FLOATING_TOOLBAR_EDGE_MARGIN * 2,
+				// Hidden until measured and placed, so it never flashes outside
+				visibility: placement ? "visible" : "hidden",
 				opacity: visible ? 1 : 0,
 			}}
 			role="toolbar"

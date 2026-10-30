@@ -19,6 +19,7 @@ from rest_framework.views import APIView
 from ..models import Endorsement, ProjectPlan
 from ..permissions import can_edit_document_content, strip_protected_fields
 from ..serializers import ProjectPlanSerializer, TinyProjectPlanSerializer
+from ..services.related_project_service import visible_rows_prefetch
 
 LOCKED_DOCUMENT_ERROR = {
     "detail": (
@@ -116,6 +117,7 @@ class ProjectPlanDetail(APIView):
                 .prefetch_related(
                     "document__project__business_area__division__approvers",
                     "document__project__business_area__division__directorate_email_list",
+                    visible_rows_prefetch(),
                 )
                 .get(pk=pk)
             )

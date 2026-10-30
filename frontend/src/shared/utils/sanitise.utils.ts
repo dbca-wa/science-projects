@@ -32,6 +32,30 @@ export function sanitizeInput(input: string): string {
 }
 
 /**
+ * Converts an HTML fragment, such as a project title, to plain text for
+ * display as a text node.
+ *
+ * sanitizeInput removes tags but returns serialised HTML, so "&" comes back
+ * as "&amp;" and shows literally when rendered as text. This also decodes
+ * entities and collapses whitespace. The result is text: render it as a React
+ * child or attribute, never as HTML.
+ *
+ * @example
+ * ```ts
+ * toPlainText("<p>Fish &amp; fauna&nbsp;survey</p>");
+ * // Returns: 'Fish & fauna survey'
+ * ```
+ */
+export function toPlainText(html: string | null | undefined): string {
+	if (!html) return "";
+	// Parsing in a separate DOMParser document is inert: nothing loads or runs
+	const text =
+		new DOMParser().parseFromString(sanitizeInput(html), "text/html").body
+			.textContent ?? "";
+	return text.replace(/\s+/g, " ").trim();
+}
+
+/**
  * Sanitises a URL to prevent javascript: and data: protocol attacks.
  * Only allows http:, https:, and mailto: protocols.
  * Automatically adds https:// if no protocol is specified.

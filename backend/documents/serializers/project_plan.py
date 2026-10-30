@@ -9,6 +9,7 @@ from medias.serializers import AECPDFSerializer, TinyMethodologyImageSerializer
 
 from ..models import Endorsement, ProjectPlan
 from .base import TinyProjectDocumentSerializer
+from .related_projects import RelatedProjectsFieldsMixin
 
 
 class MethodologyImageMethodMixin:
@@ -85,14 +86,37 @@ class TinyProjectPlanSerializer(
         ]
 
 
+class TinyProjectPlanWithRelatedProjectsSerializer(
+    RelatedProjectsFieldsMixin, TinyProjectPlanSerializer
+):
+    """
+    Minimal project plan serializer plus its related projects list and
+    suggestions, for single-plan payloads such as the project detail.
+    """
+
+    related_project_links = serializers.SerializerMethodField()
+    related_project_suggestions = serializers.SerializerMethodField()
+
+    class Meta(TinyProjectPlanSerializer.Meta):
+        fields = TinyProjectPlanSerializer.Meta.fields + [
+            "related_project_links",
+            "related_project_suggestions",
+        ]
+
+
 class ProjectPlanSerializer(
-    EndorsementMethodMixin, MethodologyImageMethodMixin, serializers.ModelSerializer
+    RelatedProjectsFieldsMixin,
+    EndorsementMethodMixin,
+    MethodologyImageMethodMixin,
+    serializers.ModelSerializer,
 ):
     """Standard project plan serializer"""
 
     document = TinyProjectDocumentSerializer(read_only=True)
     endorsements = serializers.SerializerMethodField()
     methodology_image = serializers.SerializerMethodField()
+    related_project_links = serializers.SerializerMethodField()
+    related_project_suggestions = serializers.SerializerMethodField()
 
     class Meta:
         model = ProjectPlan
@@ -112,6 +136,8 @@ class ProjectPlanSerializer(
             "related_projects",
             "endorsements",
             "methodology_image",
+            "related_project_links",
+            "related_project_suggestions",
         ]
 
 
