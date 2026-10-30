@@ -173,6 +173,7 @@ export const RichTextEditor = React.forwardRef<
 		{
 			value,
 			onChange,
+			onBaselineChange,
 			onSave,
 			placeholder = "Enter text...",
 			readOnly = false,
@@ -277,7 +278,11 @@ export const RichTextEditor = React.forwardRef<
 
 						{/* Floating toolbar — appears near text selection */}
 						{!readOnly && toolbar !== "none" && floatingToolbar && (
-							<FloatingLinkToolbar showLinks={showLinks} toolbar={toolbar} />
+							<FloatingLinkToolbar
+								showLinks={showLinks}
+								toolbar={toolbar}
+								editorKey={editorKey}
+							/>
 						)}
 
 						{/* Plugins */}
@@ -300,7 +305,10 @@ export const RichTextEditor = React.forwardRef<
 						{!readOnly && <ConditionalDragDrop />}
 						{autoFocus && <AutoFocusPlugin />}
 						{moveCursorToEnd && <MoveCursorToEndPlugin />}
-						<OnChangePlugin onChange={handleContentChange} />
+						<OnChangePlugin
+							onChange={handleContentChange}
+							onBaselineChange={onBaselineChange}
+						/>
 						{/* PrepopulateHTMLPlugin handles initial content loading ONCE */}
 						<PrepopulateHTMLPlugin html={value} />
 						{/* ControlledValuePlugin handles subsequent value prop changes (Clear, Reset, etc.) */}

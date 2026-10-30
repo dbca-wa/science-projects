@@ -346,6 +346,50 @@ describe("InlineEditStore", () => {
 		it("should return false for unregistered editor", () => {
 			expect(store.hasChanges("concept-plan-aims", 999)).toBe(false);
 		});
+
+		it("should use the change state reported by the editor", () => {
+			store.registerEditor({
+				contentType: "concept-plan-aims",
+				entityId: 123,
+				originalContent: "<p>Same</p>",
+				elementRef: null,
+			});
+			// A blank line is dropped by the content comparison...
+			store.updateCurrentContent(
+				"concept-plan-aims",
+				123,
+				"<p>Same</p><p><br></p>"
+			);
+			expect(store.hasChanges("concept-plan-aims", 123)).toBe(false);
+
+			// ...but the editor knows it is a change
+			store.reportHasChanges("concept-plan-aims", 123, true);
+			expect(store.hasChanges("concept-plan-aims", 123)).toBe(true);
+			expect(store.hasUnsavedChanges).toBe(true);
+		});
+
+		it("should trust a reported 'no changes' over differing serialisation", () => {
+			store.registerEditor({
+				contentType: "concept-plan-aims",
+				entityId: 123,
+				originalContent: "<p>Stored by an older editor</p>",
+				elementRef: null,
+			});
+			store.updateCurrentContent(
+				"concept-plan-aims",
+				123,
+				'<p class="editor-paragraph" dir="ltr"><span style="white-space: pre-wrap;">Stored by an older editor</span></p>'
+			);
+
+			store.reportHasChanges("concept-plan-aims", 123, false);
+
+			expect(store.hasChanges("concept-plan-aims", 123)).toBe(false);
+		});
+
+		it("should ignore reports for an unregistered editor", () => {
+			store.reportHasChanges("concept-plan-aims", 999, true);
+			expect(store.hasChanges("concept-plan-aims", 999)).toBe(false);
+		});
 	});
 
 	describe("hasUnsavedChanges", () => {

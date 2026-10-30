@@ -8,6 +8,7 @@
 
 import React, { useRef } from "react";
 import { observer } from "mobx-react";
+import { useLexicalComposerContext } from "@lexical/react/LexicalComposerContext";
 import { useEditorStore } from "@/app/stores/store-context";
 import type { ToolbarProps } from "@/shared/types/editor.types";
 import { FormatButton } from "./FormatButton";
@@ -30,11 +31,19 @@ import { TOOLBAR_CONFIGS } from "./toolbar-configs";
 export const Toolbar: React.FC<ToolbarProps> = observer(
 	({ mode, disabled = false, editorKey }) => {
 		const editorStore = useEditorStore();
+		const [editor] = useLexicalComposerContext();
 		const toolbarRef = useRef<HTMLDivElement>(null);
 
 		if (mode === "none") {
 			return null;
 		}
+
+		// Toolbar commands are routed through the shared store's active editor.
+		// Make this toolbar's own editor the active one before any button acts, so a
+		// click never lands on another open (or already destroyed) editor.
+		const activateOwnEditor = () => {
+			editorStore.initLexicalEditor(editor, editorKey);
+		};
 
 		const config = TOOLBAR_CONFIGS[mode];
 
@@ -134,7 +143,10 @@ export const Toolbar: React.FC<ToolbarProps> = observer(
 						// the editor to lose focus, clearing the selection and breaking
 						// formatting commands.
 						e.preventDefault();
+						activateOwnEditor();
 					}}
+					// Keyboard users reach the buttons by tabbing, which skips mousedown
+					onFocus={activateOwnEditor}
 				>
 					{/* Undo/Redo buttons - shown in all modes */}
 					<div

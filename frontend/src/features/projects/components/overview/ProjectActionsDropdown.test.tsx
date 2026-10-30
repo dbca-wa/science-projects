@@ -329,6 +329,8 @@ function makeDocumentsWithApprovedProjectPlan(): IProjectDocuments {
 			project_tasks: null,
 			related_projects: null,
 			endorsements: null,
+			related_project_links: [],
+			related_project_suggestions: [],
 		},
 		progress_reports: [],
 		student_reports: [],

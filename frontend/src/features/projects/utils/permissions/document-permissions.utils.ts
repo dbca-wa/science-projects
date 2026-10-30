@@ -75,3 +75,51 @@ export function calculateDocumentEditPermission({
 
 	return false;
 }
+
+interface RelatedProjectsEditPermissionParams {
+	/** Current authenticated user */
+	currentUser: IUserMe | null | undefined;
+	/** Project team members */
+	members: IProjectMember[] | null;
+	/** Whether the current user is the business area lead */
+	isBaLead?: boolean;
+	/** Whether the current user is a caretaker of the BA leader */
+	userIsCaretakerOfBaLeader?: boolean;
+	/** Whether the current user is a caretaker of the project leader */
+	userIsCaretakerOfProjectLeader?: boolean;
+	/** Whether the current user is a caretaker of an admin (superuser) */
+	userIsCaretakerOfAdmin?: boolean;
+}
+
+/**
+ * Calculate whether a user can change a project plan's related projects list.
+ *
+ * The same people who work on the plan, but without document locking: the list
+ * stays editable after the plan is approved. Mirrors the backend's
+ * CanEditProject permission:
+ *   - superusers, and caretakers of a superuser
+ *   - project team members
+ *   - the business area lead, and caretakers of the BA leader
+ *   - caretakers of the project leader
+ */
+export function calculateRelatedProjectsEditPermission({
+	currentUser,
+	members,
+	isBaLead = false,
+	userIsCaretakerOfBaLeader = false,
+	userIsCaretakerOfProjectLeader = false,
+	userIsCaretakerOfAdmin = false,
+}: RelatedProjectsEditPermissionParams): boolean {
+	if (!currentUser) return false;
+	if (currentUser.is_superuser || userIsCaretakerOfAdmin) return true;
+
+	const userInTeam =
+		members?.some((member) => member.user.id === currentUser.id) ?? false;
+
+	return (
+		userInTeam ||
+		isBaLead ||
+		userIsCaretakerOfBaLeader ||
+		userIsCaretakerOfProjectLeader
+	);
+}

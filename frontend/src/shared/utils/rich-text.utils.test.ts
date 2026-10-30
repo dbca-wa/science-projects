@@ -3,6 +3,7 @@ import {
 	isPlainText,
 	convertPlainTextToRichText,
 	ensureRichText,
+	hasRichTextChanged,
 } from "./rich-text.utils";
 
 describe("rich-text.utils", () => {
@@ -105,5 +106,75 @@ describe("rich-text.utils", () => {
 			);
 			expect(result).toContain("</span></p>");
 		});
+	});
+});
+
+describe("hasRichTextChanged", () => {
+	// HTML in the shape Lexical exports it
+	const paragraph = (text: string, attrs = ' dir="ltr"') =>
+		`<p class="editor-paragraph"${attrs}><span style="white-space: pre-wrap;">${text}</span></p>`;
+	const list = (...items: string[]) =>
+		`<ul class="editor-list-ul">${items
+			.map(
+				(item, index) =>
+					`<li value="${index + 1}" class="editor-listitem"><span style="white-space: pre-wrap;">${item}</span></li>`
+			)
+			.join("")}</ul>`;
+	const baseline = paragraph("Intro") + list("One", "Two");
+
+	it("returns false for identical content", () => {
+		expect(hasRichTextChanged(baseline, baseline)).toBe(false);
+	});
+
+	it("ignores surrounding whitespace", () => {
+		expect(hasRichTextChanged(baseline, `  ${baseline}\n`)).toBe(false);
+	});
+
+	it("detects text typed at the end of a bullet", () => {
+		const edited = paragraph("Intro") + list("One", "Two more");
+		expect(hasRichTextChanged(baseline, edited)).toBe(true);
+	});
+
+	it("detects a blank paragraph added after a list", () => {
+		const edited = `${baseline}<p class="editor-paragraph"><br></p>`;
+		expect(hasRichTextChanged(baseline, edited)).toBe(true);
+	});
+
+	it("detects a line break inside a bullet", () => {
+		const edited =
+			paragraph("Intro") +
+			list("One", 'Two</span><br><span style="white-space: pre-wrap;">Next');
+		expect(hasRichTextChanged(baseline, edited)).toBe(true);
+	});
+
+	it("detects an alignment change that only alters attributes", () => {
+		const edited =
+			paragraph("Intro", ' dir="ltr" style="text-align: center;"') +
+			list("One", "Two");
+		expect(hasRichTextChanged(baseline, edited)).toBe(true);
+	});
+
+	it("treats blank content on both sides as unchanged", () => {
+		expect(hasRichTextChanged("", '<p class="editor-paragraph"><br></p>')).toBe(
+			false
+		);
+		expect(hasRichTextChanged("<p></p>", "")).toBe(false);
+	});
+
+	it("detects content added to a blank baseline", () => {
+		expect(hasRichTextChanged("", paragraph("New"))).toBe(true);
+	});
+
+	it("does not treat an image without text as blank", () => {
+		expect(
+			hasRichTextChanged(
+				"",
+				'<p><img src="/media/figure.png" alt="Figure"></p>'
+			)
+		).toBe(true);
+	});
+
+	it("detects content being cleared", () => {
+		expect(hasRichTextChanged(baseline, "<p><br></p>")).toBe(true);
 	});
 });

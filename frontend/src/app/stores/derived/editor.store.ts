@@ -119,6 +119,7 @@ export class EditorStore extends BaseStore<EditorStoreState> {
 			shouldBlockNavigation: action,
 			// Lexical toolbar actions
 			initLexicalEditor: action,
+			releaseLexicalEditor: action,
 			updateFormattingState: action,
 			clearFormattingState: action,
 			toggleFormat: action,
@@ -320,6 +321,28 @@ export class EditorStore extends BaseStore<EditorStoreState> {
 
 		// Initial formatting state update
 		this.updateFormattingState();
+	};
+
+	/**
+	 * Release an editor instance when it unmounts.
+	 *
+	 * Without this the store keeps pointing at a destroyed editor, so toolbar
+	 * commands from the next editor that opens are silently sent to the old one.
+	 * Releasing also lets the next editor to mount become active straight away.
+	 * Does nothing if a different editor is currently active.
+	 */
+	releaseLexicalEditor = (editor: LexicalEditor) => {
+		if (this.lexicalEditor !== editor) return;
+
+		for (const unregister of this.unregisterListeners) {
+			unregister();
+		}
+		this.unregisterListeners = [];
+		this.lexicalEditor = null;
+		this.activeEditorKey = null;
+		this.state.canUndo = false;
+		this.state.canRedo = false;
+		this.clearFormattingState();
 	};
 
 	/**

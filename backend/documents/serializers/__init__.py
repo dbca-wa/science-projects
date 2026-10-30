@@ -74,6 +74,14 @@ from .project_plan import (
     ProjectPlanUpdateSerializer,
     TinyEndorsementSerializer,
     TinyProjectPlanSerializer,
+    TinyProjectPlanWithRelatedProjectsSerializer,
+)
+
+# Related projects serializers
+from .related_projects import (
+    ProjectPlanRelatedProjectCreateSerializer,
+    ProjectPlanRelatedProjectSerializer,
+    RelatedProjectSummarySerializer,
 )
 
 # Student report serializers
@@ -103,7 +111,12 @@ __all__ = [
     "ConceptPlanUpdateSerializer",
     # Project plan
     "TinyProjectPlanSerializer",
+    "TinyProjectPlanWithRelatedProjectsSerializer",
     "ProjectPlanSerializer",
+    # Related projects
+    "ProjectPlanRelatedProjectSerializer",
+    "ProjectPlanRelatedProjectCreateSerializer",
+    "RelatedProjectSummarySerializer",
     "ProjectPlanCreateSerializer",
     "ProjectPlanUpdateSerializer",
     "TinyEndorsementSerializer",
