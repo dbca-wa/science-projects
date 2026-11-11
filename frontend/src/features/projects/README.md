@@ -363,9 +363,3 @@ These components are internal to projects and should NOT be imported by other fe
 - Team management
 - Document tabs
 - Wizard
-
-## Related Documentation
-
-- Architecture Guidelines: `.kiro/steering/frontend-architecture-guidelines.md`
-- Architecture Decision Record: `.kiro/supporting_documents/architecture/ADR-projects-reorganisation.md`
-- Design Document: `.kiro/specs/projects-feature-reorganization/design.md`
