@@ -239,7 +239,7 @@ Main configuration file defining all hooks.
 **Key settings:**
 ```yaml
 default_language_version:
-  python: python3.13
+  python: python3.15
 
 fail_fast: false  # Run all hooks even if one fails
 
