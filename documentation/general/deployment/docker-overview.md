@@ -108,7 +108,7 @@ docker build \
 
 The backend container runs Django with gunicorn.
 
-**Base image**: `python:3.14-slim-bookworm`
+**Base image**: `python:3.15-slim-trixie`
 **Final Size**: ~880MB
 **Port**: 8000
 
@@ -118,7 +118,7 @@ The backend container runs Django with gunicorn.
 
 ```dockerfile
 # Stage 1: Build
-FROM python:3.14-slim-bookworm AS builder
+FROM python:3.15-slim-trixie AS builder
 
 WORKDIR /usr/src/app
 
@@ -163,7 +163,7 @@ RUN python -m compileall -b -f . \
     && find . -name "*.py" -not -name "manage.py" -not -path "./*/migrations/*" -delete
 
 # Stage 2: Production
-FROM python:3.14-slim-bookworm AS production
+FROM python:3.15-slim-trixie AS production
 
 WORKDIR /usr/src/app
 
@@ -180,7 +180,7 @@ COPY --from=builder /usr/lib/prince /usr/lib/prince
 ENV PATH="${PATH}:/usr/lib/prince/bin"
 
 # Copy Python packages from builder
-COPY --from=builder /usr/local/lib/python3.14/site-packages /usr/local/lib/python3.14/site-packages
+COPY --from=builder /usr/local/lib/python3.15/site-packages /usr/local/lib/python3.15/site-packages
 COPY --from=builder /usr/local/bin /usr/local/bin
 
 # Create non-root user
@@ -775,7 +775,7 @@ Total:                    ~296MB
 
 ### Backend Image Breakdown (~880MB)
 
-**Base image**: `python:3.14-slim-bookworm` (production stage)
+**Base image**: `python:3.15-slim-trixie` (production stage)
 
 ```
 Base Python image:        ~108MB

@@ -837,7 +837,6 @@ files = [
 [package.dependencies]
 Django = ">=5.2,<7.0"
 redis = ">=4.0.2"
-typing_extensions = {version = ">=4.12", markers = "python_version <= \"3.12\""}
 
 [package.extras]
 hiredis = ["redis[hiredis] (>=4.0.2)"]
@@ -1443,10 +1442,7 @@ files = [
 ]
 
 [package.dependencies]
-numpy = [
-    {version = ">=2.0.2", markers = "python_version < \"3.14\""},
-    {version = ">=2.3.3", markers = "python_version >= \"3.14\""},
-]
+numpy = {version = ">=2.3.3", markers = "python_version >= \"3.14\""}
 python-dateutil = ">=2.9.0"
 tzdata = {version = "*", markers = "sys_platform == \"win32\" or sys_platform == \"emscripten\""}
 
@@ -1650,7 +1646,6 @@ files = [
 ]
 
 [package.dependencies]
-typing-extensions = {version = ">=4.6", markers = "python_version < \"3.13\""}
 tzdata = {version = "*", markers = "sys_platform == \"win32\""}
 
 [package.extras]
@@ -2452,5 +2447,5 @@ brotli = ["brotli"]
 
 [metadata]
 lock-version = "2.1"
-python-versions = "<3.16,>=3.12.11"
-content-hash = "eeb0f45cfea241d8748b3684d015769164aa5492f93e8b3f51f1cbff2c514c59"
+python-versions = ">=3.15,<3.16"
+content-hash = "af74e9cad65b95c42d44754d73694241b2922a105e0c57a0cb1e31de3ba1a915"
