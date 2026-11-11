@@ -70,7 +70,7 @@ jobs:
           bun-version: latest
 
       - name: Cache Bun dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.bun/install/cache
@@ -240,7 +240,7 @@ jobs:
           echo "$HOME/.local/bin" >> $GITHUB_PATH
 
       - name: Cache Poetry dependencies
-        uses: actions/cache@v4
+        uses: actions/cache@v6
         with:
           path: |
             ~/.cache/pypoetry
@@ -256,7 +256,7 @@ jobs:
           poetry install --no-interaction --no-ansi
 
       - name: Restore test durations cache
-        uses: actions/cache/restore@v4
+        uses: actions/cache/restore@v6
         with:
           path: backend/.test_durations
           key: test-durations-${{ hashFiles('backend/poetry.lock') }}
@@ -394,7 +394,7 @@ jobs:
 
       - name: Save merged durations cache
         if: always()
-        uses: actions/cache/save@v4
+        uses: actions/cache/save@v6
         with:
           path: backend/.test_durations
           key: test-durations-${{ hashFiles('backend/poetry.lock') }}-${{ github.run_id }}
