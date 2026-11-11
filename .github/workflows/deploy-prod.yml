@@ -571,6 +571,36 @@ jobs:
             vuln-frontend.csv
           retention-days: 90
 
+      - name: Install scanners (Frontend)
+        # Pinned Grype second opinion alongside Trivy; never blocks the release.
+        continue-on-error: true
+        run: bash .github/scripts/install-scanners.sh
+
+      - name: Run Grype scan (Frontend)
+        continue-on-error: true
+        run: |
+          config_args=()
+          if [ -f frontend/.grype.yaml ]; then
+            config_args=(--config frontend/.grype.yaml)
+          fi
+          grype ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-frontend:stable "${config_args[@]}" -o json --file grype-frontend.json
+          TOTAL=$(jq '.matches | length' grype-frontend.json)
+          CRIT=$(jq '[.matches[] | select(.vulnerability.severity == "Critical")] | length' grype-frontend.json)
+          HIGH=$(jq '[.matches[] | select(.vulnerability.severity == "High")] | length' grype-frontend.json)
+          {
+            echo "## Frontend Grype Scan"
+            echo "- Total: ${TOTAL} | Critical: ${CRIT} | High: ${HIGH}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Grype results (Frontend)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype-frontend-${{ steps.version.outputs.VERSION }}
+          path: grype-frontend.json
+          retention-days: 90
+          if-no-files-found: ignore
+
   scan-backend:
     name: Scan Backend Image
     runs-on: ubuntu-latest
@@ -674,3 +704,33 @@ jobs:
             sbom-backend.txt
             vuln-backend.csv
           retention-days: 90
+
+      - name: Install scanners (Backend)
+        # Pinned Grype second opinion alongside Trivy; never blocks the release.
+        continue-on-error: true
+        run: bash .github/scripts/install-scanners.sh
+
+      - name: Run Grype scan (Backend)
+        continue-on-error: true
+        run: |
+          config_args=()
+          if [ -f backend/.grype.yaml ]; then
+            config_args=(--config backend/.grype.yaml)
+          fi
+          grype ${{ env.REGISTRY }}/${{ env.IMAGE_PREFIX }}-backend:stable "${config_args[@]}" -o json --file grype-backend.json
+          TOTAL=$(jq '.matches | length' grype-backend.json)
+          CRIT=$(jq '[.matches[] | select(.vulnerability.severity == "Critical")] | length' grype-backend.json)
+          HIGH=$(jq '[.matches[] | select(.vulnerability.severity == "High")] | length' grype-backend.json)
+          {
+            echo "## Backend Grype Scan"
+            echo "- Total: ${TOTAL} | Critical: ${CRIT} | High: ${HIGH}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload Grype results (Backend)
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: grype-backend-${{ steps.version.outputs.VERSION }}
+          path: grype-backend.json
+          retention-days: 90
+          if-no-files-found: ignore
