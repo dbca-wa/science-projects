@@ -116,7 +116,7 @@ jobs:
           bun-version: latest
 
       - name: Download all coverage artifacts
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: frontend-coverage-*
           path: frontend/coverage-reports
@@ -359,13 +359,13 @@ jobs:
           poetry install --no-interaction --no-ansi --only main,dev
 
       - name: Download all coverage reports
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: backend-coverage-*
           path: backend/coverage-reports
 
       - name: Download test durations from shards
-        uses: actions/download-artifact@v4
+        uses: actions/download-artifact@v8
         with:
           pattern: test-durations-*
           path: backend/durations-reports
