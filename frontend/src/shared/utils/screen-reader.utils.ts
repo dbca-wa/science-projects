@@ -39,6 +39,10 @@ export function announceToScreenReader(
 	message: string,
 	priority: "polite" | "assertive" = "polite"
 ): void {
+	// Nothing to announce to when there is no DOM (a late timer after the
+	// page or test environment has been torn down)
+	if (typeof document === "undefined") return;
+
 	const liveRegion = getLiveRegion();
 	liveRegion.setAttribute("aria-live", priority);
 
