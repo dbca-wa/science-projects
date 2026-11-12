@@ -8,6 +8,12 @@ vi.mock("./LayerPopover", () => ({
 	LayerPopover: () => <div data-testid="layer-popover">Layer Popover</div>,
 }));
 
+const announce = vi.hoisted(() => vi.fn());
+
+vi.mock("@/shared/utils/screen-reader.utils", () => ({
+	mapAnnouncements: { fullscreenToggle: announce, viewReset: vi.fn() },
+}));
+
 // Mock the store context
 const mockStore = {
 	state: {
@@ -66,6 +72,34 @@ describe("MapControls", () => {
 		fireEvent.click(fullscreenButton);
 
 		expect(mockStore.toggleMapFullscreen).toHaveBeenCalled();
+	});
+
+	it("should announce the fullscreen change after a short delay", () => {
+		vi.useFakeTimers();
+		try {
+			render(<MapControlsWrapper />);
+			fireEvent.click(screen.getByLabelText("Enter map fullscreen"));
+			expect(announce).not.toHaveBeenCalled();
+
+			vi.advanceTimersByTime(100);
+			expect(announce).toHaveBeenCalledWith(true);
+		} finally {
+			vi.useRealTimers();
+		}
+	});
+
+	it("should not announce after the controls are removed", () => {
+		vi.useFakeTimers();
+		try {
+			const { unmount } = render(<MapControlsWrapper />);
+			fireEvent.click(screen.getByLabelText("Enter map fullscreen"));
+			unmount();
+
+			vi.advanceTimersByTime(1000);
+			expect(announce).not.toHaveBeenCalled();
+		} finally {
+			vi.useRealTimers();
+		}
 	});
 
 	it("should show correct fullscreen button state when not in fullscreen", () => {
