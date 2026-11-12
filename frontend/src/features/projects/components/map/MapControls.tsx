@@ -1,6 +1,6 @@
 import { observer } from "mobx-react-lite";
 import { Maximize, Minimize, RotateCcw } from "lucide-react";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type L from "leaflet";
 import { Button } from "@/shared/components/ui/button";
 import { LayerPopover } from "./LayerPopover";
@@ -89,6 +89,12 @@ import { mapAnnouncements } from "@/shared/utils/screen-reader.utils";
 const MapControlButtons = observer(() => {
 	const store = useProjectMapStore();
 	const [isMapFullscreen, setIsMapFullscreen] = useState(false);
+	const announceTimer = useRef<ReturnType<typeof setTimeout>>(undefined);
+
+	// A pending announcement must not outlive the component
+	useEffect(() => {
+		return () => clearTimeout(announceTimer.current);
+	}, []);
 
 	// Listen for fullscreen changes
 	useEffect(() => {
@@ -107,7 +113,8 @@ const MapControlButtons = observer(() => {
 		store.toggleMapFullscreen();
 
 		// Announce the change after a brief delay to ensure state has updated
-		setTimeout(() => {
+		clearTimeout(announceTimer.current);
+		announceTimer.current = setTimeout(() => {
 			mapAnnouncements.fullscreenToggle(!wasFullscreen);
 		}, 100);
 	};
