@@ -1,7 +1,7 @@
 import { useEffect, useRef, useMemo } from "react";
 import { useMap } from "react-leaflet";
-import L from "leaflet";
-import "leaflet.heat";
+import type { Layer } from "leaflet";
+import { HeatLayer } from "leaflet.heat";
 import type { IProjectData } from "@/shared/types/project.types";
 import type { GeoJSONData } from "@/features/projects/types/map.types";
 import { calculateCoordinates } from "@/features/projects/utils/map/coordinate-calculation.utils";
@@ -25,6 +25,23 @@ const HEATMAP_CONFIG = {
 		1.0: "#cc0000", // dark red (high density)
 	},
 };
+
+/** A heatmap point: latitude, longitude and intensity. */
+type HeatmapPoint = [number, number, number];
+
+/**
+ * The parts of a leaflet.heat layer used here, as seen by Leaflet 1.x.
+ *
+ * leaflet.heat's bundled types extend Leaflet 2's generic `Layer`, which
+ * @types/leaflet 1.x does not have, so the class loses its `Layer` members
+ * (addTo and others). This restores them.
+ */
+type HeatmapLayerInstance = Layer & {
+	setLatLngs(points: HeatmapPoint[]): HeatmapLayerInstance;
+};
+
+const createHeatLayer = (points: HeatmapPoint[]): HeatmapLayerInstance =>
+	new HeatLayer(points, HEATMAP_CONFIG) as unknown as HeatmapLayerInstance;
 
 /**
  * HeatmapLayer Props
@@ -89,7 +106,7 @@ export const HeatmapLayer = ({
 	isVisible,
 }: HeatmapLayerProps) => {
 	const map = useMap();
-	const heatmapRef = useRef<L.HeatLayer | null>(null);
+	const heatmapRef = useRef<HeatmapLayerInstance | null>(null);
 	const updateTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
 	// Memoize heatmap points calculation for performance
@@ -143,7 +160,7 @@ export const HeatmapLayer = ({
 						});
 					} else if (points.length > 0) {
 						// Create new heatmap layer
-						heatmapRef.current = L.heatLayer(points, HEATMAP_CONFIG);
+						heatmapRef.current = createHeatLayer(points);
 						heatmapRef.current.addTo(map);
 						logger.debug("Heatmap layer created and added to map", {
 							pointCount: points.length,
